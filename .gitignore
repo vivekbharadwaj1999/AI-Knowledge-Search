@@ -1,0 +1,10 @@
+# env files
+.env
+*/.env
+
+# typical extras
+node_modules/
+__pycache__/
+*.pyc
+dist/
+build/

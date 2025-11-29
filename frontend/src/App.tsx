@@ -43,15 +43,13 @@ function DocumentSelector({ documents, selectedDoc, onChange }: DocSelectorProps
 function App() {
   const [documents, setDocuments] = useState<string[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | undefined>();
-  const [docVersion, setDocVersion] = useState(0); // bump when new file ingested
+  const [docVersion, setDocVersion] = useState(0);
 
-  // Fetch docs whenever docVersion changes
   useEffect(() => {
     fetchDocuments()
       .then((data) => {
         setDocuments(data.documents);
         if (data.documents.length > 0) {
-          // keep current selection if still present, else default to latest
           setSelectedDoc((prev) =>
             prev && data.documents.includes(prev)
               ? prev
@@ -67,8 +65,8 @@ function App() {
   }, [docVersion]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+    <div className="h-screen flex flex-col overflow-hidden bg-slate-950 text-slate-100">
+      <header className="shrink-0 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">
           VivBot - A document AI Knowledge Search
         </h1>
@@ -79,11 +77,17 @@ function App() {
         />
       </header>
 
-      <main className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
-        <UploadPanel
-          onIndexed={() => setDocVersion((v) => v + 1)}
-        />
-        <AskPanel selectedDoc={selectedDoc} />
+      {/* Column layout: upload on top, ask/chat below */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Top: Upload panel, small-ish height */}
+        <div className="shrink-0 p-6 pb-3">
+          <UploadPanel onIndexed={() => setDocVersion((v) => v + 1)} />
+        </div>
+
+        {/* Bottom: Ask/chat panel fills remaining height */}
+        <div className="flex-1 p-6 pt-3 overflow-hidden">
+          <AskPanel selectedDoc={selectedDoc} />
+        </div>
       </main>
     </div>
   );

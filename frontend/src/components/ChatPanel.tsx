@@ -28,7 +28,7 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="space-y-4 p-4 rounded-xl bg-slate-900/70 border border-slate-700">
+    <div className="space-y-4 p-4 rounded-xl bg-slate-900/70 border border-slate-700 overflow-y-hidden">
       <h2 className="text-xl font-semibold">2. Ask a question</h2>
 
       <textarea

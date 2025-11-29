@@ -62,7 +62,7 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 overflow-hidden">
+    <div className="h-full min-h-0 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
       <h2 className="font-semibold text-lg mb-1">2. Ask questions</h2>
 
       <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
@@ -104,7 +104,7 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
         </button>
       </div>
 
-      <div className="mt-3 flex-1 overflow-y-auto space-y-3">
+      <div className="mt-3 flex-1 overflow-y-auto space-y-3 pr-1">
         {messages.length === 0 && (
           <p className="text-sm text-slate-400">
             Your questions and answers will appear here as a chat.
