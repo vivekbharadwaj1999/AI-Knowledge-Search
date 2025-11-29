@@ -3,16 +3,23 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.schemas import AskRequest, AskResponse
-from app.ingest import ingest_file, UPLOAD_DIR   # ✅ use ingest_file now
+from app.ingest import ingest_file, UPLOAD_DIR
 from app.qa import answer_question
 from app.vector_store import list_documents
 
 app = FastAPI(title="AI Knowledge Search Engine")
 
-# CORS – React frontend
+# ⚠️ IMPORTANT:
+# Add your Vercel URL here after deployment, e.g.:
+# "https://vivbot.vercel.app"
+origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=origins,          # MUST NOT include "*"
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,7 +59,7 @@ async def ingest_document(file: UploadFile = File(...)):
 
 
 @app.post("/ask", response_model=AskResponse)
-async def ask_question(payload: AskRequest):
+async def ask_question_route(payload: AskRequest):
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
