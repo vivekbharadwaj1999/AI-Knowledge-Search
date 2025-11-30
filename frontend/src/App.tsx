@@ -65,7 +65,7 @@ function App() {
   }, [docVersion]);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex flex-col overflow-hidden bg-slate-950 text-slate-100">
       <header className="shrink-0 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">
           VivBot - A document AI Knowledge Search
