@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import UploadPanel from "./components/UploadPanel";
 import AskPanel from "./components/AskPanel";
-import { fetchDocuments } from "./api";
+import { fetchDocuments, clearDocuments } from "./api";
 
 type DocSelectorProps = {
   documents: string[];
@@ -64,17 +64,50 @@ function App() {
       });
   }, [docVersion]);
 
+  const handleClearAll = async () => {
+    if (documents.length === 0) return;
+
+    const ok = window.confirm(
+      "Are you sure you want to remove ALL documents and their embeddings?"
+    );
+    if (!ok) return;
+
+    try {
+      await clearDocuments();
+      // reset local state
+      setDocuments([]);
+      setSelectedDoc(undefined);
+      // bump version in case something else depends on refetch
+      setDocVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Failed to clear documents", err);
+      alert("Failed to remove documents. Check console for details.");
+    }
+  };
+
   return (
     <div className="flex flex-col overflow-hidden bg-slate-950 text-slate-100">
       <header className="shrink-0 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">
           VivBot - A document AI Knowledge Search
         </h1>
-        <DocumentSelector
-          documents={documents}
-          selectedDoc={selectedDoc}
-          onChange={setSelectedDoc}
-        />
+
+        <div className="flex items-center gap-4">
+          <DocumentSelector
+            documents={documents}
+            selectedDoc={selectedDoc}
+            onChange={setSelectedDoc}
+          />
+          <button
+            onClick={handleClearAll}
+            disabled={documents.length === 0}
+            className={`px-3 py-1 text-sm rounded-md border border-red-500 text-red-400 hover:bg-red-500/10 transition ${
+              documents.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            Remove all documents
+          </button>
+        </div>
       </header>
 
       {/* Column layout: upload on top, ask/chat below */}

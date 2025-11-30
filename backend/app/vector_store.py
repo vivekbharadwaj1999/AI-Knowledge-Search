@@ -115,3 +115,11 @@ def list_documents() -> List[str]:
         if name:
             names.add(name)
     return sorted(names)
+
+
+def clear_vector_store() -> None:
+    """
+    Remove ALL stored vectors / documents by deleting the JSONL file.
+    """
+    if os.path.exists(VECTOR_STORE_PATH):
+        os.remove(VECTOR_STORE_PATH)

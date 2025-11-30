@@ -64,3 +64,8 @@ export async function generateInsights(params: {
   const res = await axios.post(`${API_BASE}/insights`, params);
   return res.data as AutoInsights;
 }
+
+export async function clearDocuments() {
+  const res = await axios.delete(`${API_BASE}/documents`);
+  return res.data as { status: string; message: string };
+}
