@@ -36,6 +36,9 @@ Return a STRICT JSON object with the following keys:
       (5 = absolutely key, 3 = helpful, 1 = minor, 0 = irrelevant)
 
 IMPORTANT:
+- Different context chunks may be tagged like "[Source: DOC_NAME]" to indicate
+  different documents. If they clearly disagree, briefly reflect that in
+  key_points or sentiment.
 - Only return valid JSON, no commentary.
 - For sentence_importance, include at most 15 sentences, pick those that
   best explain or support the answer for this question.

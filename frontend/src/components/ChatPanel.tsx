@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { askQuestion } from "../api";
+import { askQuestion, type SourceChunk } from "../api";
 
 export function ChatPanel() {
   const [question, setQuestion] = useState("");
@@ -7,6 +7,7 @@ export function ChatPanel() {
   const [context, setContext] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sources, setSources] = useState<SourceChunk[]>([]);
 
   const onAsk = async () => {
     if (!question.trim()) {
@@ -19,6 +20,7 @@ export function ChatPanel() {
       const res = await askQuestion(question.trim(), 5);
       setAnswer(res.answer);
       setContext(res.context || []);
+      setSources(res.sources || []);
     } catch (err) {
       console.error(err);
       setError("Error while asking the question.");
@@ -59,20 +61,52 @@ export function ChatPanel() {
         </div>
       )}
 
-      {context.length > 0 && (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-sm text-slate-300">
-            Show context chunks ({context.length})
+      {(context.length > 0 || sources.length > 0) && (
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-sky-400">
+            Show raw retrieved context
           </summary>
           <div className="mt-2 space-y-2 text-xs text-slate-300 max-h-64 overflow-y-auto">
-            {context.map((chunk, idx) => (
-              <div key={idx} className="p-2 rounded bg-slate-800/80">
-                <div className="font-mono text-[10px] text-slate-400">
-                  Chunk {idx + 1}
+            {sources.length > 0 ? (
+              <>
+                <div className="text-[10px] text-slate-400">
+                  Used documents:{" "}
+                  {Array.from(new Set(sources.map((s) => s.doc_name))).join(", ")}
                 </div>
-                <div>{chunk}</div>
-              </div>
-            ))}
+                {Array.from(
+                  Object.entries(
+                    sources.reduce((acc, s) => {
+                      if (!acc[s.doc_name]) acc[s.doc_name] = [];
+                      acc[s.doc_name].push(s.text);
+                      return acc;
+                    }, {} as Record<string, string[]>)
+                  )
+                ).map(([docName, chunks]) => (
+                  <div key={docName} className="p-2 rounded bg-slate-800/80">
+                    <div className="font-mono text-[10px] text-sky-300 mb-1">
+                      {docName}
+                    </div>
+                    {chunks.map((chunk, idx) => (
+                      <div
+                        key={docName + idx}
+                        className="border-b border-slate-700 last:border-none pb-1"
+                      >
+                        {chunk}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </>
+            ) : (
+              context.map((chunk, idx) => (
+                <div key={idx} className="p-2 rounded bg-slate-800/80">
+                  <div className="font-mono text-[10px] text-slate-400">
+                    Chunk {idx + 1}
+                  </div>
+                  <div>{chunk}</div>
+                </div>
+              ))
+            )}
           </div>
         </details>
       )}

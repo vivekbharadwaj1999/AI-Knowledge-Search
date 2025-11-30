@@ -10,11 +10,19 @@ class AskRequest(BaseModel):
     model: Optional[str] = None
 
 
+class SourceChunk(BaseModel):
+    doc_name: str
+    text: str
+    score: float
+
+
 class AskResponse(BaseModel):
     answer: str
     context: List[str]
     # which model actually answered (defaults to GROQ_MODEL)
     model_used: str
+    # detailed per-chunk metadata (doc + score)
+    sources: List[SourceChunk] = []
 
 
 class InsightsRequest(BaseModel):
