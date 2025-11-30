@@ -8,9 +8,17 @@ type DocSelectorProps = {
   documents: string[];
   selectedDoc?: string;
   onChange: (doc?: string) => void;
+  useAllDocs: boolean;
+  setUseAllDocs: (v: boolean) => void;
 };
 
-function DocumentSelector({ documents, selectedDoc, onChange }: DocSelectorProps) {
+function DocumentSelector({
+  documents,
+  selectedDoc,
+  onChange,
+  useAllDocs,
+  setUseAllDocs,
+}: DocSelectorProps) {
   if (documents.length === 0) {
     return (
       <div className="text-sm text-slate-400">
@@ -19,17 +27,53 @@ function DocumentSelector({ documents, selectedDoc, onChange }: DocSelectorProps
     );
   }
 
+  const toggleAllDocs = () => {
+    const next = !useAllDocs;
+    setUseAllDocs(next);
+    if (next) {
+      // when switching to "all documents", clear specific doc
+      onChange(undefined);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="text-slate-300">Document:</span>
+    <div className="flex flex-wrap items-center gap-3 text-sm">
+      {/* Label */}
+      <span className="text-slate-300">Search from:</span>
+
+      {/* "All documents" + switch */}
+      <div className="flex items-center gap-2">
+        <span className="text-slate-300">All documents</span>
+        <button
+          type="button"
+          onClick={toggleAllDocs}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition
+            ${useAllDocs ? "bg-sky-500" : "bg-slate-600"}`}
+          aria-pressed={useAllDocs}
+          aria-label="Toggle search across all documents"
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition
+              ${useAllDocs ? "translate-x-4" : "translate-x-1"}`}
+          />
+        </button>
+      </div>
+
+      {/* Dropdown for single-doc mode */}
       <select
         value={selectedDoc ?? ""}
+        disabled={useAllDocs}
         onChange={(e) => {
           const v = e.target.value || undefined;
           onChange(v);
         }}
-        className="bg-slate-800 border border-slate-600 rounded-md px-2 py-1 text-sm text-slate-100"
+        className={`bg-slate-800 border border-slate-600 rounded-md px-2 py-1 text-sm text-slate-100
+          min-w-[220px]
+          ${useAllDocs ? "opacity-50 cursor-not-allowed" : ""}`}
       >
+        <option value="" disabled>
+          Select a document…
+        </option>
         {documents.map((doc) => (
           <option key={doc} value={doc}>
             {doc}
@@ -44,6 +88,7 @@ function App() {
   const [documents, setDocuments] = useState<string[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | undefined>();
   const [docVersion, setDocVersion] = useState(0);
+  const [useAllDocs, setUseAllDocs] = useState<boolean>(true);
 
   useEffect(() => {
     fetchDocuments()
@@ -97,13 +142,14 @@ function App() {
             documents={documents}
             selectedDoc={selectedDoc}
             onChange={setSelectedDoc}
+            useAllDocs={useAllDocs}
+            setUseAllDocs={setUseAllDocs}
           />
           <button
             onClick={handleClearAll}
             disabled={documents.length === 0}
-            className={`px-3 py-1 text-sm rounded-md border border-red-500 text-red-400 hover:bg-red-500/10 transition ${
-              documents.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+            className={`px-3 py-1 text-sm rounded-md border border-red-500 text-red-400 hover:bg-red-500/10 transition ${documents.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+              }`}
           >
             Remove all documents
           </button>
@@ -119,7 +165,7 @@ function App() {
 
         {/* Bottom: Ask/chat panel fills remaining height */}
         <div className="flex-1 p-6 pt-3 overflow-hidden">
-          <AskPanel selectedDoc={selectedDoc} />
+          <AskPanel selectedDoc={useAllDocs ? undefined : selectedDoc} />
         </div>
       </main>
     </div>

@@ -1,17 +1,25 @@
 // src/api.ts
 import axios from "axios";
 
-const API_BASE = "/api";
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "/api";
 
 export type AskResult = {
   answer: string;
   context: string[];
   model_used?: string;
+  sources?: SourceChunk[];
 };
 
 export type SentenceImportance = {
   sentence: string;
   score: number; // 0–5
+};
+
+export type SourceChunk = {
+  doc_name: string;
+  text: string;
+  score: number;
 };
 
 export type AutoInsights = {

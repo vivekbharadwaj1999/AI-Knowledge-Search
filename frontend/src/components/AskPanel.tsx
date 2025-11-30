@@ -1,7 +1,8 @@
 // src/components/AskPanel.tsx
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { askQuestion, generateInsights } from "../api";
 import type { AutoInsights } from "../api";
+import type { SourceChunk } from "../api";
 
 type AskPanelProps = {
   selectedDoc?: string;
@@ -15,6 +16,7 @@ type Message = {
   answer: string;
   context: string[];
   modelUsed?: string;
+  sources?: SourceChunk[];
   insights?: AutoInsights;
   insightsLoading?: boolean;
   insightsError?: string | null;
@@ -27,11 +29,13 @@ type Comparison = {
     model: string;
     answer: string;
     context: string[];
+    sources?: SourceChunk[];
   };
   right: {
     model: string;
     answer: string;
     context: string[];
+    sources?: SourceChunk[];
   };
 };
 
@@ -318,6 +322,7 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
           answer: res.answer,
           context: res.context,
           modelUsed: res.model_used || modelId,
+          sources: res.sources || [],
         },
       ]);
       setQuestion("");
@@ -339,7 +344,7 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleAsk();
@@ -360,10 +365,15 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
     if (!target) return;
 
     try {
+      const contextForInsights =
+        target.sources && target.sources.length > 0
+          ? target.sources.map((s) => `[Source: ${s.doc_name}] ${s.text}`)
+          : target.context;
+
       const insights = await generateInsights({
         question: target.question,
         answer: target.answer,
-        context: target.context,
+        context: contextForInsights,
         model: target.modelUsed || modelId,
       });
 
@@ -410,11 +420,13 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
             model: leftRes.model_used || modelLeft,
             answer: leftRes.answer,
             context: leftRes.context,
+            sources: leftRes.sources || [],
           },
           right: {
             model: rightRes.model_used || modelRight,
             answer: rightRes.answer,
             context: rightRes.context,
+            sources: rightRes.sources || [],
           },
         },
       ]);
@@ -434,7 +446,7 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
         <div>
           {selectedDoc
             ? `Answering for document: ${selectedDoc}`
-            : "No document selected - using latest ingested document."}
+            : "Searching across all indexed documents."}
         </div>
         <div className="text-[11px] text-slate-500">
           Context Highlighting + Model Picker + Auto Insights + Side-by-side
@@ -715,15 +727,47 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
                         </div>
 
                         {/* Actual chunks (scroll under the sticky header) */}
+                        {/* Actual chunks (scroll under the sticky header) */}
                         <div className="px-2 py-1 space-y-1">
-                          {m.context.map((c, idx) => (
-                            <pre
-                              key={idx}
-                              className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
-                            >
-                              {renderHighlightedChunk(c, m, highlightMode)}
-                            </pre>
-                          ))}
+                          {m.sources && m.sources.length > 0 ? (
+                            <>
+                              <div className="text-[10px] text-slate-400 mb-1">
+                                Used documents:{" "}
+                                {Array.from(new Set(m.sources.map((s) => s.doc_name))).join(", ")}
+                              </div>
+
+                              {Array.from(
+                                Object.entries(
+                                  m.sources.reduce((acc, s) => {
+                                    if (!acc[s.doc_name]) acc[s.doc_name] = [];
+                                    acc[s.doc_name].push(s.text);
+                                    return acc;
+                                  }, {} as Record<string, string[]>)
+                                )
+                              ).map(([docName, chunks]) => (
+                                <div key={docName} className="mb-1">
+                                  <div className="text-[11px] text-sky-300 mb-0.5">{docName}</div>
+                                  {chunks.map((c, idx) => (
+                                    <pre
+                                      key={docName + idx}
+                                      className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                                    >
+                                      {renderHighlightedChunk(c, m, highlightMode)}
+                                    </pre>
+                                  ))}
+                                </div>
+                              ))}
+                            </>
+                          ) : (
+                            m.context.map((c, idx) => (
+                              <pre
+                                key={idx}
+                                className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                              >
+                                {renderHighlightedChunk(c, m, highlightMode)}
+                              </pre>
+                            ))
+                          )}
                         </div>
                       </div>
                     )}
@@ -852,16 +896,48 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
                     )}
 
                     {showCompareContextId === cmp.id &&
-                      cmp.left.context.length > 0 && (
-                        <div className="mt-2 text-[11px] text-slate-300 bg-slate-900/80 border border-slate-700 rounded p-2 space-y-1 max-h-40 overflow-y-auto">
-                          {cmp.left.context.map((c, idx) => (
-                            <pre
-                              key={idx}
-                              className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
-                            >
-                              {highlightChunk(c, cmp.question)}
-                            </pre>
-                          ))}
+                      (cmp.left.sources?.length || cmp.left.context.length) > 0 && (
+                        <div className="mt-2 text-[11px] text-slate-300 border border-slate-700 rounded p-2 space-y-1 max-h-40 overflow-y-auto">
+                          {cmp.left.sources && cmp.left.sources.length > 0 ? (
+                            <>
+                              <div className="mb-1 text-[10px] text-slate-400">
+                                Used documents:{" "}
+                                {Array.from(
+                                  new Set(cmp.left.sources.map((s) => s.doc_name))
+                                ).join(", ")}
+                              </div>
+                              {Array.from(
+                                Object.entries(
+                                  cmp.left.sources.reduce((acc, s) => {
+                                    if (!acc[s.doc_name]) acc[s.doc_name] = [];
+                                    acc[s.doc_name].push(s.text);
+                                    return acc;
+                                  }, {} as Record<string, string[]>)
+                                )
+                              ).map(([docName, chunks]) => (
+                                <div key={docName} className="mb-1">
+                                  <div className="text-[11px] text-sky-300 mb-0.5">{docName}</div>
+                                  {chunks.map((c, idx) => (
+                                    <pre
+                                      key={docName + idx}
+                                      className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                                    >
+                                      {highlightChunk(c, cmp.question)}
+                                    </pre>
+                                  ))}
+                                </div>
+                              ))}
+                            </>
+                          ) : (
+                            cmp.left.context.map((c, idx) => (
+                              <pre
+                                key={idx}
+                                className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                              >
+                                {highlightChunk(c, cmp.question)}
+                              </pre>
+                            ))
+                          )}
                         </div>
                       )}
                   </div>
@@ -895,16 +971,50 @@ export default function AskPanel({ selectedDoc }: AskPanelProps) {
                     )}
 
                     {showCompareContextId === cmp.id &&
-                      cmp.right.context.length > 0 && (
+                      (cmp.right.sources?.length || cmp.right.context.length) > 0 && (
                         <div className="mt-2 text-[11px] text-slate-300 bg-slate-900/80 border border-slate-700 rounded p-2 space-y-1 max-h-40 overflow-y-auto">
-                          {cmp.right.context.map((c, idx) => (
-                            <pre
-                              key={idx}
-                              className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
-                            >
-                              {highlightChunk(c, cmp.question)}
-                            </pre>
-                          ))}
+                          {cmp.right.sources && cmp.right.sources.length > 0 ? (
+                            <>
+                              <div className="mb-1 text-[10px] text-slate-400">
+                                Used documents:{" "}
+                                {Array.from(
+                                  new Set(cmp.right.sources.map((s) => s.doc_name))
+                                ).join(", ")}
+                              </div>
+                              {Array.from(
+                                Object.entries(
+                                  cmp.right.sources.reduce((acc, s) => {
+                                    if (!acc[s.doc_name]) acc[s.doc_name] = [];
+                                    acc[s.doc_name].push(s.text);
+                                    return acc;
+                                  }, {} as Record<string, string[]>)
+                                )
+                              ).map(([docName, chunks]) => (
+                                <div key={docName} className="mb-1">
+                                  <div className="text-[11px] text-sky-300 mb-0.5">
+                                    {docName}
+                                  </div>
+                                  {chunks.map((c, idx) => (
+                                    <pre
+                                      key={docName + idx}
+                                      className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                                    >
+                                      {highlightChunk(c, cmp.question)}
+                                    </pre>
+                                  ))}
+                                </div>
+                              ))}
+                            </>
+                          ) : (
+                            cmp.right.context.map((c, idx) => (
+                              <pre
+                                key={idx}
+                                className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                              >
+                                {highlightChunk(c, cmp.question)}
+                              </pre>
+                            ))
+                          )}
                         </div>
                       )}
                   </div>

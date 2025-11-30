@@ -80,32 +80,45 @@ def similarity_search(
     query_embedding: List[float],
     k: int = 5,
     doc_name: Optional[str] = None,
-) -> List[str]:
+) -> List[Dict[str, Any]]:
     """
-    Return top-k text chunks most similar to the query, optionally filtered by doc_name.
-    If doc_name is None, default to the most recently ingested document.
+    Return top-k records most similar to the query.
+
+    Each record is a dict with at least:
+      - "doc_name": str
+      - "text": str
+      - "embedding": List[float]
+      - "score": float (similarity to the query)
+
+    - If doc_name is None, search across ALL documents.
+    - If doc_name is provided, restrict the search to that single document.
     """
     records = _load_records()
     if not records:
         return []
 
-    # Default: restrict to latest ingested doc
-    if doc_name is None:
-        doc_name = get_latest_doc_name()
-
+    # If a specific document is chosen, filter down to that doc only.
     if doc_name is not None:
         records = [r for r in records if r.get("doc_name") == doc_name]
+        if not records:
+            return []
 
-    scored: List[tuple[float, str]] = []
+    results: List[Dict[str, Any]] = []
     for rec in records:
         emb = rec.get("embedding")
         if not isinstance(emb, list):
             continue
-        score = _cosine_similarity(query_embedding, emb)
-        scored.append((score, rec["text"]))
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [text for score, text in scored[:k]]
+        score = _cosine_similarity(query_embedding, emb)
+        enriched = dict(rec)
+        enriched["score"] = float(score)
+        results.append(enriched)
+
+    if not results:
+        return []
+
+    results.sort(key=lambda r: r["score"], reverse=True)
+    return results[:k]
 
 
 def list_documents() -> List[str]:

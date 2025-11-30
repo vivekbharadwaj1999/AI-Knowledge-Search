@@ -62,7 +62,7 @@ async def ask_question_route(payload: AskRequest):
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    answer, chunks = answer_question(
+    answer, chunks, sources = answer_question(
         payload.question,
         k=payload.top_k,
         doc_name=payload.doc_name,
@@ -71,7 +71,12 @@ async def ask_question_route(payload: AskRequest):
 
     model_used = payload.model or GROQ_MODEL
 
-    return AskResponse(answer=answer, context=chunks, model_used=model_used)
+    return AskResponse(
+        answer=answer,
+        context=chunks,
+        model_used=model_used,
+        sources=sources,
+    )
 
 
 @app.post("/insights", response_model=InsightsResponse)
@@ -110,5 +115,3 @@ def delete_all_documents():
     clear_vector_store()
 
     return {"status": "ok", "message": "All documents removed"}
-
-
