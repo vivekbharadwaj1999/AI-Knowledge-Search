@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import UploadPanel from "./components/UploadPanel";
 import AskPanel from "./components/AskPanel";
 import { fetchDocuments, clearDocuments } from "./api";
+import logo from "./assets/logo.webp";
 
 type DocSelectorProps = {
   documents: string[];
@@ -132,10 +133,17 @@ function App() {
 
   return (
     <div className="flex flex-col overflow-hidden bg-slate-950 text-slate-100">
-      <header className="shrink-0 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">
-          VivBot - A document AI Knowledge Search
-        </h1>
+      <header className="shrink-0 border-b border-slate-800 px-6 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img
+            src={logo}
+            alt="VivBot logo"
+            className="h-12 w-12 object-contain rounded-xl"
+          />
+          <h1 className="text-xl font-semibold">
+            VivBot - A document AI Knowledge Search
+          </h1>
+        </div>
 
         <div className="flex items-center gap-4">
           <DocumentSelector
