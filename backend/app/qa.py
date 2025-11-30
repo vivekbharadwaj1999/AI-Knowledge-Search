@@ -23,6 +23,7 @@ def answer_question(
     question: str,
     k: int = 7,
     doc_name: Optional[str] = None,
+    model: Optional[str] = None,
 ):
     embed_client = EmbeddingClient()
     query_embedding = embed_client.embed_query(question)
@@ -30,6 +31,6 @@ def answer_question(
 
     llm = LLMClient()
     prompt = build_prompt(question, top_chunks)
-    answer = llm.complete(prompt)
+    answer = llm.complete(prompt, model=model)
 
     return answer, top_chunks
