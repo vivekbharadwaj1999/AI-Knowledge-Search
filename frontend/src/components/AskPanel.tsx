@@ -76,7 +76,7 @@ export type AskControlsProps = {
   setModelRight: (v: string) => void;
   canCompare: boolean;
   isCompareLoading: boolean;
-  askInputRef?: RefObject<HTMLTextAreaElement>;
+  askInputRef?: RefObject<HTMLTextAreaElement | null>;
 };
 
 export default function AskControls({
