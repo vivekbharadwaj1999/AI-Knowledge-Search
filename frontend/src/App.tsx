@@ -115,7 +115,9 @@ const SCORE_LABELS: Record<ScoreKey, string> = {
 function ScorePills({ scores }: { scores?: CritiqueScores }) {
   if (!scores) return null;
 
-  const entries = Object.entries(scores)
+  const entries: [ScoreKey, number][] = Object.entries(
+    scores as Record<string, number>
+  )
     .filter(([, v]) => typeof v === "number")
     .map(([k, v]) => [k as ScoreKey, v as number]);
 
@@ -126,13 +128,15 @@ function ScorePills({ scores }: { scores?: CritiqueScores }) {
     if (key === "hallucination_risk") {
       // reversed (high risk = bad)
       if (value >= 0.66) return "bg-red-900/60 border-red-600 text-red-300";
-      if (value >= 0.33) return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
+      if (value >= 0.33)
+        return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
       return "bg-green-900/40 border-green-600 text-green-200";
     }
 
     // normal metrics (high = good)
     if (value >= 0.66) return "bg-green-900/40 border-green-600 text-green-200";
-    if (value >= 0.33) return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
+    if (value >= 0.33)
+      return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
     return "bg-red-900/60 border-red-600 text-red-300";
   };
 
