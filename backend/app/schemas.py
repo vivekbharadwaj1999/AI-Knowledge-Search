@@ -49,3 +49,68 @@ class InsightsResponse(BaseModel):
     keywords: List[str]
     highlights: List[List[str]] = []
     sentence_importance: List[SentenceImportance] = []
+
+
+class ReportSection(BaseModel):
+    heading: str
+    content: str
+
+
+class QAItem(BaseModel):
+    question: str
+    answer: str
+
+
+class KnowledgeGraphEdge(BaseModel):
+    source: str
+    relation: str
+    target: str
+
+
+class DocumentReport(BaseModel):
+    # we use doc_name (same as elsewhere in your app)
+    doc_name: str
+    title: Optional[str] = None
+
+    executive_summary: str
+    sections: List[ReportSection]
+
+    key_concepts: List[str]
+    concept_explanations: List[str]
+
+    relationships: List[str]
+    knowledge_graph: List[KnowledgeGraphEdge]
+
+    practice_questions: List[QAItem]
+
+    difficulty_level: str
+    difficulty_explanation: str
+
+    study_path: List[str]
+
+    explain_like_im_5: str
+    cheat_sheet: List[str]
+
+
+class ReportRequest(BaseModel):
+    doc_name: str
+    # optional override for model (same pattern as AskRequest)
+    model: Optional[str] = None
+
+
+class DocPairRelation(BaseModel):
+    doc_a: str
+    doc_b: str
+    similarity: float
+    relationship: str
+
+
+class CrossDocRelations(BaseModel):
+    documents: List[str]
+    global_themes: List[str]
+    relations: List[DocPairRelation]
+
+
+class CrossDocRelationsRequest(BaseModel):
+    # optional model override, same idea as AskRequest
+    model: Optional[str] = None
