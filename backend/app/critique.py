@@ -1,6 +1,7 @@
 # backend/app/critique.py
 import json
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -85,6 +86,50 @@ def _safe_list_str(value: Any) -> List[str]:
     return []
 
 
+def _safe_json_parse(raw: str) -> Dict[str, Any] | None:
+    """
+    Try very hard to extract a JSON object from a messy model response.
+
+    Supports:
+    - plain JSON
+    - ```json ... ``` fenced blocks
+    - first {...} object inside the text
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+
+    # 1) direct JSON
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+
+    # 2) fenced ```json ... ``` or ``` ... ``` blocks
+    fenced = re.search(
+        r"```(?:json)?\s*(\{.*?\})\s*```",
+        raw,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if fenced:
+        block = fenced.group(1).strip()
+        try:
+            return json.loads(block)
+        except Exception:
+            pass
+
+    # 3) first {...} object anywhere in the string
+    brace_match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if brace_match:
+        block = brace_match.group(0)
+        try:
+            return json.loads(block)
+        except Exception:
+            pass
+
+    return None
+
+
 def _safe_scores(data: Dict[str, Any]) -> Dict[str, Optional[float]]:
     scores = data.get("scores") or {}
 
@@ -132,19 +177,22 @@ def run_critique(
     prompt = _build_critique_prompt(question, answer, context)
     raw = llm.complete(prompt, model=critic)
 
-    parsed: Dict[str, Any]
-    try:
-        parsed = json.loads(raw)
-    except Exception as e:
-        # Debug logs so you can see exactly what went wrong
-        print("Failed to parse critique JSON:", e)
+    # Try to parse as JSON, but be robust to messy outputs
+    parsed = _safe_json_parse(raw)
+
+    if not parsed:
+        # Debug logs so you can see what came back
+        print("Failed to parse critique JSON from model:", critic)
         print("Raw critique output:")
         print(raw)
 
-        # Fallback: treat raw as answer critique only
+        # Fallback: treat raw as a free-form critique of the answer
         parsed = {
             "answer_critique_markdown": str(raw),
-            "prompt_feedback_markdown": "The critic returned non-JSON output; treat the text above as the answer critique.",
+            "prompt_feedback_markdown": (
+                "The critic returned non-JSON output; "
+                "treat the text above as the answer critique."
+            ),
             "improved_prompt": question,
             "prompt_issue_tags": [],
             "scores": {},
