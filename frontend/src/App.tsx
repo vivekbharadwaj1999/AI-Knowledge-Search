@@ -345,40 +345,38 @@ function DocumentSelector({
    Types for unified output
    ────────────────────────────── */
 
-type OutputEntry =
+type OutputEntryBase =
   | {
-    id: number;
     kind: "ask";
     messageId: number;
   }
   | {
-    id: number;
     kind: "compare";
     comparisonId: number;
   }
   | {
-    id: number;
     kind: "report";
     docName?: string;
     report: DocumentReport;
   }
   | {
-    id: number;
     kind: "relations";
     relations: CrossDocRelations;
   };
+
+type OutputEntry = OutputEntryBase & {
+  id: number;
+};
 
 function App() {
   const [documents, setDocuments] = useState<string[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | undefined>();
   const [docVersion, setDocVersion] = useState(0);
   const [useAllDocs, setUseAllDocs] = useState<boolean>(false);
-
-  /* Unified output feed (right side) */
   const [outputFeed, setOutputFeed] = useState<OutputEntry[]>([]);
 
-  const appendOutput = (entry: Omit<OutputEntry, "id">) => {
-    setOutputFeed((prev) => [
+  const appendOutput = (entry: OutputEntryBase) => {
+    setOutputFeed((prev): OutputEntry[] => [
       ...prev,
       {
         ...entry,
@@ -386,11 +384,7 @@ function App() {
       },
     ]);
   };
-
-  /* AI Report */
-  const [report, setReport] = useState<DocumentReport | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [lastReportDoc, setLastReportDoc] = useState<string | undefined>();
 
   /* Ask / chat */
   const [question, setQuestion] = useState("");
@@ -425,8 +419,6 @@ function App() {
           );
         } else {
           setSelectedDoc(undefined);
-          setReport(null);
-          setLastReportDoc(undefined);
         }
       })
       .catch((err) => {
@@ -444,8 +436,6 @@ function App() {
       setDocuments([]);
       setSelectedDoc(undefined);
       setUseAllDocs(false);
-      setReport(null);
-      setLastReportDoc(undefined);
       setMessages([]);
       setComparisons([]);
       setOutputFeed([]);
@@ -467,8 +457,6 @@ function App() {
     try {
       setIsGeneratingReport(true);
       const res = await generateReport({ doc_name: selectedDoc });
-      setReport(res);
-      setLastReportDoc(selectedDoc);
 
       appendOutput({
         kind: "report",
@@ -1010,8 +998,8 @@ function App() {
                                   )
                                 }
                                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 border ${msg.insights
-                                    ? "bg-slate-800 hover:bg-slate-700 text-sky-200 border-slate-600"
-                                    : "bg-slate-900 text-slate-500 border-slate-700 cursor-not-allowed opacity-60"
+                                  ? "bg-slate-800 hover:bg-slate-700 text-sky-200 border-slate-600"
+                                  : "bg-slate-900 text-slate-500 border-slate-700 cursor-not-allowed opacity-60"
                                   }`}
                               >
                                 {showContextFor === msg.id
