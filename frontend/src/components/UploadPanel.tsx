@@ -1,4 +1,3 @@
-// src/components/UploadPanel.tsx
 import { useState } from "react";
 import { uploadFile } from "../api";
 
@@ -24,7 +23,7 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
     try {
       const res = await uploadFile(file);
       setStatus(`Indexed ${res.chunks_indexed} chunks from "${file.name}".`);
-      onIndexed?.(); // 👈 notify parent to refresh doc list
+      onIndexed?.();
     } catch (err: any) {
       console.error(err);
       setStatus(err?.response?.data?.detail || "Upload failed");

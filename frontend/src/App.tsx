@@ -1,9 +1,9 @@
-// src/App.tsx
 import { useEffect, useRef, useLayoutEffect, useState, type KeyboardEvent } from "react";
 import UploadPanel from "./components/UploadPanel";
 import AskControls from "./components/AskPanel";
 import ReportPanel from "./components/ReportPanel";
 import ReactMarkdown from "react-markdown";
+import logo from "./assets/logo.webp";
 
 import {
   fetchDocuments,
@@ -25,21 +25,13 @@ import type {
   SourceChunk,
 } from "./api";
 
-import logo from "./assets/logo.webp";
-
-/* ──────────────────────────────
-   Markdown renderer for answers
-   ────────────────────────────── */
-
 function MarkdownText({ text }: { text: string }) {
-  // convert <br> tags to real line breaks
   const cleaned = text.replace(/<br\s*\/?>/gi, "  \n");
 
   return (
     <div
       className="prose prose-invert prose-sm max-w-none
-                 prose-p:my-1 prose-li:my-0.5 prose-ul:ml-4 prose-ol:ml-4"
-    >
+                 prose-p:my-1 prose-li:my-0.5 prose-ul:ml-4 prose-ol:ml-4">
       <ReactMarkdown>{cleaned}</ReactMarkdown>
     </div>
   );
@@ -124,16 +116,13 @@ function ScorePills({ scores }: { scores?: CritiqueScores }) {
   if (!entries.length) return null;
 
   const getColor = (key: ScoreKey, value: number) => {
-    // value is 0 → 1
     if (key === "hallucination_risk") {
-      // reversed (high risk = bad)
       if (value >= 0.66) return "bg-red-900/60 border-red-600 text-red-300";
       if (value >= 0.33)
         return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
       return "bg-green-900/40 border-green-600 text-green-200";
     }
 
-    // normal metrics (high = good)
     if (value >= 0.66) return "bg-green-900/40 border-green-600 text-green-200";
     if (value >= 0.33)
       return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
@@ -156,10 +145,6 @@ function ScorePills({ scores }: { scores?: CritiqueScores }) {
     </div>
   );
 }
-
-/* ──────────────────────────────
-   Highlighting helpers
-   ────────────────────────────── */
 
 export type HighlightMode = "ai" | "keywords" | "sentences" | "off";
 
@@ -264,7 +249,6 @@ function renderHighlightedChunk(
 
   const insights = message.insights;
 
-  // keyword-only mode
   if (mode === "keywords") {
     const phrases =
       insights?.keywords && insights.keywords.length > 0
@@ -379,10 +363,6 @@ function renderHighlightedChunk(
   });
 }
 
-/* ──────────────────────────────
-   Document selector
-   ────────────────────────────── */
-
 type DocumentSelectorProps = {
   documents: string[];
   selectedDoc?: string;
@@ -416,8 +396,6 @@ function DocumentSelector({
   return (
     <div className="flex flex-col gap-2 text-xs sm:text-sm">
       <div className="text-slate-300 mb-2 font-bold">Search from:</div>
-
-      {/* All docs toggle */}
       <div className="flex items-center gap-2">
         <span className="text-slate-300 whitespace-nowrap mb-1">All documents</span>
         <button
@@ -435,7 +413,6 @@ function DocumentSelector({
         </button>
       </div>
 
-      {/* Single doc select */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <span className="text-slate-300 whitespace-nowrap">
           or single document:
@@ -459,10 +436,6 @@ function DocumentSelector({
     </div>
   );
 }
-
-/* ──────────────────────────────
-   Types for unified output
-   ────────────────────────────── */
 
 type OutputEntryBase =
   | {
@@ -512,8 +485,6 @@ function App() {
     ]);
   };
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-
-  /* Ask / chat */
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -521,25 +492,18 @@ function App() {
   const [modelId, setModelId] = useState<string>("llama-3.1-8b-instant");
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("ai");
   const [showContextFor, setShowContextFor] = useState<number | null>(null);
-
-  /* Compare */
   const [compareQuestion, setCompareQuestion] = useState("");
   const [modelLeft, setModelLeft] = useState("llama-3.1-8b-instant");
   const [modelRight, setModelRight] = useState("llama-3.3-70b-versatile");
   const [comparisons, setComparisons] = useState<Comparison[]>([]);
   const [isCompareLoading, setIsCompareLoading] = useState(false);
-
-  /* Critique */
   const [critiqueQuestion, setCritiqueQuestion] = useState("");
   const [answerModelId, setAnswerModelId] = useState("llama-3.1-8b-instant");
   const [criticModelId, setCriticModelId] = useState("llama-3.3-70b-versatile");
   const [critiques, setCritiques] = useState<CritiqueRun[]>([]);
   const [isCritiqueLoading, setIsCritiqueLoading] = useState(false);
-
-  /* Relations */
   const [relationsLoading, setRelationsLoading] = useState(false);
 
-  /* Load documents */
   useEffect(() => {
     fetchDocuments()
       .then((data) => {
@@ -561,7 +525,6 @@ function App() {
 
   useLayoutEffect(() => {
     function updateHeight() {
-      // only clamp on desktop (Tailwind lg breakpoint ~= 1024px)
       if (window.innerWidth >= 1024 && leftColumnRef.current) {
         setRightMaxHeight(leftColumnRef.current.offsetHeight);
       } else {
@@ -574,7 +537,6 @@ function App() {
     return () => window.removeEventListener("resize", updateHeight);
   });
 
-  /* Clear all */
   const handleClearAll = async () => {
     if (!window.confirm("Remove all documents and reset the vector store?")) {
       return;
@@ -595,7 +557,6 @@ function App() {
     }
   };
 
-  /* Generate report */
   const handleGenerateReport = async () => {
     if (!selectedDoc || useAllDocs) {
       alert("Please select a single document (disable 'All documents') first.");
@@ -619,7 +580,6 @@ function App() {
     }
   };
 
-  /* Ask */
   const canAsk = question.trim().length > 0 && !isLoading;
 
   const handleAsk = async () => {
@@ -674,7 +634,6 @@ function App() {
     }
   };
 
-  /* Auto insights */
   const triggerInsights = async (id: number) => {
     setMessages((prev) =>
       prev.map((m) =>
@@ -719,7 +678,6 @@ function App() {
     }
   };
 
-  /* Compare */
   const canCompare =
     compareQuestion.trim().length > 0 &&
     !isCompareLoading &&
@@ -769,7 +727,6 @@ function App() {
     }
   };
 
-  /* Critique */
   const canCritique =
     critiqueQuestion.trim().length > 0 &&
     !isCritiqueLoading &&
@@ -804,7 +761,6 @@ function App() {
     }
   };
 
-  /* Relations */
   const handleAnalyzeRelations = async () => {
     if (!useAllDocs) {
       alert("Turn on 'All documents' to analyze relations between them.");
@@ -829,7 +785,6 @@ function App() {
 
   return (
     <div className="flex flex-col bg-slate-950 text-slate-100 min-h-screen overflow-hidden">
-      {/* Header */}
       <header className="shrink-0 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center gap-3">
         <img
           src={logo}
@@ -846,13 +801,10 @@ function App() {
         </div>
       </header>
 
-      {/* Main */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* LEFT column */}
         <section
           ref={leftColumnRef}
           className="w-full lg:w-1/2 border-b-0 lg:border-r border-slate-800 flex flex-col">
-          {/* 1. Upload */}
           <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-slate-800">
             <h2 className="text-sm sm:text-base font-semibold mb-3">
               1. Upload & index a document
@@ -860,7 +812,6 @@ function App() {
             <UploadPanel onIndexed={() => setDocVersion((v) => v + 1)} />
           </div>
 
-          {/* 2. Documents & scope */}
           <div className="px-4 sm:px-6 py-4 border-b border-slate-800 space-y-3">
             <h2 className="text-sm sm:text-base font-semibold mb-1">
               2. Documents & search scope
@@ -903,7 +854,6 @@ function App() {
             </div>
           </div>
 
-          {/* 3. Ask questions */}
           <div className="px-4 sm:px-6 py-4 border-b border-slate-800">
             <h2 className="text-sm sm:text-base font-semibold mb-3">
               3. Ask questions
@@ -932,7 +882,6 @@ function App() {
             />
           </div>
 
-          {/* 4. Compare models */}
           <div className="px-4 sm:px-6 py-4">
             <h2 className="text-sm sm:text-base font-semibold mb-3">
               4. Compare models
@@ -1028,7 +977,6 @@ function App() {
               </div>
             </div>
           </div>
-          {/* 5. Critique answer & prompt */}
           <div className="px-4 sm:px-6 py-4 border-t border-slate-800">
             <h2 className="text-sm sm:text-base font-semibold mb-2">
               5. Critique answer & prompt
@@ -1042,7 +990,7 @@ function App() {
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
                            focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 rows={2}
-                placeholder="Ask something you want to improve, e.g. &quot;Explain GDPR&quot;..."
+                placeholder="Ask something to critique the answer and prompt..."
                 value={critiqueQuestion}
                 onChange={(e) => setCritiqueQuestion(e.target.value)}
               />
@@ -1132,7 +1080,6 @@ function App() {
           </div>
         </section>
 
-        {/* RIGHT column */}
         <section
           className="w-full lg:w-1/2 flex flex-col"
           style={
@@ -1185,7 +1132,6 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Auto insights */}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                           <button
                             type="button"
@@ -1193,7 +1139,7 @@ function App() {
                             className="inline-flex items-center gap-1 rounded-md border border-violet-500/70 bg-violet-600 hover:bg-violet-500 px-2 py-1 text-[11px] text-white disabled:opacity-50"
                             disabled={msg.insightsLoading}
                           >
-                            <span>✨ Auto insights</span>
+                            <span>Auto insights</span>
                             {msg.insightsLoading && (
                               <span className="opacity-80">(thinking...)</span>
                             )}
@@ -1296,7 +1242,6 @@ function App() {
                           </div>
                         )}
 
-                        {/* Highlighted context */}
                         {(msg.context.length > 0 ||
                           (msg.sources && msg.sources.length > 0)) && (
                             <div className="mt-2 text-xs">
@@ -1486,7 +1431,6 @@ function App() {
                         key={entry.id}
                         className="border border-slate-800 rounded-xl bg-slate-900/40 p-3 sm:p-4 space-y-3"
                       >
-                        {/* Header row */}
                         <div className="flex items-center justify-between text-[11px] text-slate-400">
                           <span className="font-semibold text-slate-100">
                             Critique: answer & prompt
@@ -1496,7 +1440,6 @@ function App() {
                           </span>
                         </div>
 
-                        {/* Question */}
                         <div>
                           <div className="text-[11px] text-sky-300">Question</div>
                           <div className="text-xs sm:text-[13px] text-slate-100 leading-relaxed">
@@ -1504,21 +1447,18 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Prompt tips (chips) */}
                         {crt.prompt_issue_tags && crt.prompt_issue_tags.length > 0 && (
                           <PromptTipsChips
                             tags={crt.prompt_issue_tags as PromptIssueTag[]}
                           />
                         )}
 
-                        {/* Answer quality – answer + answer critique side by side */}
                         <div className="space-y-2">
                           <div className="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-800 pb-1">
                             Answer quality
                           </div>
 
                           <div className="grid gap-3 md:grid-cols-2">
-                            {/* Left: Answer */}
                             <div className="space-y-1">
                               <div className="text-[11px] font-semibold text-slate-300">
                                 Answer (base model)
@@ -1528,7 +1468,6 @@ function App() {
                               </div>
                             </div>
 
-                            {/* Right: Answer critique + scores */}
                             <div className="space-y-1">
                               <div className="text-[11px] font-semibold text-slate-300">
                                 Answer critique
@@ -1541,7 +1480,6 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Prompt coaching full width */}
                         <div className="space-y-2 border-t border-slate-800 pt-3">
                           <div className="text-[11px] uppercase tracking-wide text-slate-400">
                             Prompt issues & improved prompt
@@ -1555,7 +1493,6 @@ function App() {
                             <MarkdownText text={crt.prompt_feedback_markdown} />
                           </div>
 
-                          {/* Before/After stacked */}
                           <PromptBeforeAfter
                             original={crt.question}
                             improved={crt.improved_prompt}
@@ -1604,7 +1541,6 @@ function App() {
                     );
                   }
 
-                  // relations card
                   return (
                     <div
                       key={entry.id}

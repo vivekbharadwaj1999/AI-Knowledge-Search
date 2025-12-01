@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Optional
 import json
-
 from app.config import LLMClient
 from app.vector_store import get_document_embeddings, get_document_previews
 from app.schemas import CrossDocRelations, DocPairRelation
@@ -47,7 +46,6 @@ def analyze_cross_document_relations(
     if len(docs) < 2:
         raise ValueError("Need at least two documents to analyze relations.")
 
-    # 1) Build pair list
     pairs: List[Dict[str, Any]] = []
     for i in range(len(docs)):
         for j in range(i + 1, len(docs)):
@@ -55,7 +53,6 @@ def analyze_cross_document_relations(
             sim = _cosine_similarity(doc_embeddings[a], doc_embeddings[b])
             pairs.append({"doc_a": a, "doc_b": b, "similarity": float(sim)})
 
-    # sort & filter
     pairs.sort(key=lambda p: p["similarity"], reverse=True)
     filtered_pairs = [p for p in pairs if p["similarity"] >= min_similarity]
     if not filtered_pairs:
@@ -63,7 +60,6 @@ def analyze_cross_document_relations(
     else:
         filtered_pairs = filtered_pairs[:max_pairs]
 
-    # 2) Build prompt for LLM
     doc_blocks = []
     for name in docs:
         preview = doc_previews.get(
@@ -137,21 +133,19 @@ def analyze_cross_document_relations(
     raw = llm.complete(prompt, model=model)
     data = _safe_json_object(raw)
 
-    # 3) Coerce into models
     global_themes = data.get("global_themes") or []
     if not isinstance(global_themes, list):
         global_themes = [str(global_themes)]
 
     relations_raw = data.get("relations") or []
 
-    # build lookup of our numeric similarities so we can attach them
     sim_lookup: Dict[tuple[str, str], float] = {}
     for p in filtered_pairs:
         a = p["doc_a"]
         b = p["doc_b"]
         sim = float(p["similarity"])
         sim_lookup[(a, b)] = sim
-        sim_lookup[(b, a)] = sim  # symmetric
+        sim_lookup[(b, a)] = sim 
 
     relation_models: List[DocPairRelation] = []
     if isinstance(relations_raw, list):

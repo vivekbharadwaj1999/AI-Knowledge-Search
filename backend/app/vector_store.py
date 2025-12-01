@@ -11,9 +11,6 @@ def _ensure_dir():
 
 
 def add_embeddings(texts: List[str], embeddings: List[List[float]], doc_name: str) -> None:
-    """
-    Append (text, embedding, doc_name) records to the JSONL vector store.
-    """
     _ensure_dir()
     with open(VECTOR_STORE_PATH, "a", encoding="utf-8") as f:
         for text, emb in zip(texts, embeddings):
@@ -42,10 +39,6 @@ def _load_records() -> List[Dict[str, Any]]:
 
 
 def get_latest_doc_name() -> Optional[str]:
-    """
-    Return the doc_name of the most recently ingested document
-    (i.e., the last record in the file).
-    """
     if not os.path.exists(VECTOR_STORE_PATH):
         return None
 
@@ -97,7 +90,6 @@ def similarity_search(
     if not records:
         return []
 
-    # If a specific document is chosen, filter down to that doc only.
     if doc_name is not None:
         records = [r for r in records if r.get("doc_name") == doc_name]
         if not records:
@@ -122,11 +114,6 @@ def similarity_search(
 
 
 def get_document_text(doc_name: str, max_chars: int = 20000) -> str:
-    """
-    Concatenate all text chunks for a given document name.
-
-    Raises ValueError if no chunks are found.
-    """
     records = _load_records()
     chunks: List[str] = []
 
@@ -155,13 +142,8 @@ def list_documents() -> List[str]:
 
 
 def get_document_embeddings() -> Dict[str, List[float]]:
-    """
-    Represent each document by the FIRST chunk embedding, based on chunk index.
-    This prevents chunk-order randomness and avoids inflating similarity.
-    """
     records = _load_records()
 
-    # collect chunks with explicit ordering
     chunks_by_doc: Dict[str, List[dict]] = {}
 
     for rec in records:
@@ -172,14 +154,12 @@ def get_document_embeddings() -> Dict[str, List[float]]:
         if not doc or not isinstance(emb, list):
             continue
 
-        # try get chunk index from known keys
         chunk_index = rec.get("chunk_index")
         if chunk_index is None:
             chunk_index = rec.get("chunk")
         if chunk_index is None:
             chunk_index = rec.get("index")
         if chunk_index is None:
-            # fallback: treat ordering as 99999 (should never be chosen first)
             chunk_index = 99999
 
         chunks_by_doc.setdefault(doc, []).append({
@@ -187,11 +167,9 @@ def get_document_embeddings() -> Dict[str, List[float]]:
             "embedding": emb
         })
 
-    # now pick FIRST chunk per doc
     doc_vectors: Dict[str, List[float]] = {}
 
     for doc, chunks in chunks_by_doc.items():
-        # sort properly
         chunks.sort(key=lambda x: x["idx"])
         first = chunks[0]
         doc_vectors[doc] = first["embedding"]
@@ -200,9 +178,6 @@ def get_document_embeddings() -> Dict[str, List[float]]:
 
 
 def get_document_previews(max_chars_per_doc: int = 1200) -> Dict[str, str]:
-    """
-    Build a short text preview for each document by concatenating its chunks.
-    """
     records = _load_records()
     texts_by_doc: Dict[str, str] = {}
 
@@ -230,8 +205,5 @@ def get_document_previews(max_chars_per_doc: int = 1200) -> Dict[str, str]:
 
 
 def clear_vector_store() -> None:
-    """
-    Remove ALL stored vectors / documents by deleting the JSONL file.
-    """
     if os.path.exists(VECTOR_STORE_PATH):
         os.remove(VECTOR_STORE_PATH)

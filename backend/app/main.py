@@ -161,7 +161,6 @@ async def critique_route(payload: CritiqueRequest):
 
 @app.delete("/documents")
 def delete_all_documents():
-    # delete uploaded files
     if os.path.exists(UPLOAD_DIR):
         for fname in os.listdir(UPLOAD_DIR):
             fpath = os.path.join(UPLOAD_DIR, fname)
@@ -171,7 +170,6 @@ def delete_all_documents():
                 except Exception as e:
                     print("Delete failed:", e)
 
-    # delete JSONL vector store
     clear_vector_store()
 
     return {"status": "ok", "message": "All documents removed"}

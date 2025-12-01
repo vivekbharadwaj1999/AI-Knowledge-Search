@@ -1,4 +1,3 @@
-// src/components/ReportPanel.tsx
 import type { DocumentReport } from "../api";
 
 type ReportPanelProps = {
@@ -44,7 +43,6 @@ export default function ReportPanel({
 
   return (
     <div className="h-full overflow-auto px-6 py-4 space-y-5 text-sm lg:text-[13px]">
-      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base lg:text-lg font-semibold">
@@ -61,7 +59,6 @@ export default function ReportPanel({
         </span>
       </div>
 
-      {/* Executive summary */}
       <section className="bg-slate-900/70 rounded-2xl p-4 border border-slate-800/80 shadow-sm">
         <h3 className="text-xs font-semibold mb-2">Executive summary</h3>
         <p className="text-slate-100 leading-relaxed">
@@ -69,7 +66,6 @@ export default function ReportPanel({
         </p>
       </section>
 
-      {/* Sections */}
       {report.sections && report.sections.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-semibold">Important sections</h3>
@@ -89,7 +85,6 @@ export default function ReportPanel({
         </section>
       )}
 
-      {/* Concepts */}
       {(report.key_concepts?.length ?? 0) > 0 && (
         <section className="grid lg:grid-cols-2 gap-4">
           <div>
@@ -119,7 +114,6 @@ export default function ReportPanel({
         </section>
       )}
 
-      {/* Relationships & knowledge graph */}
       {(report.relationships?.length ?? 0) > 0 ||
       (report.knowledge_graph?.length ?? 0) > 0 ? (
         <section className="grid lg:grid-cols-2 gap-4">
@@ -157,7 +151,6 @@ export default function ReportPanel({
         </section>
       ) : null}
 
-      {/* Practice questions */}
       {report.practice_questions && report.practice_questions.length > 0 && (
         <section>
           <h3 className="text-xs font-semibold mb-2">Practice questions</h3>
@@ -179,7 +172,6 @@ export default function ReportPanel({
         </section>
       )}
 
-      {/* Difficulty + study path */}
       {(report.difficulty_explanation &&
         report.difficulty_explanation.length > 0) ||
       (report.study_path?.length ?? 0) > 0 ? (
@@ -207,21 +199,10 @@ export default function ReportPanel({
         </section>
       ) : null}
 
-      {/* ELi5 + cheat sheet */}
       {(report.explain_like_im_5 &&
         report.explain_like_im_5.length > 0) ||
       (report.cheat_sheet?.length ?? 0) > 0 ? (
-        <section className="grid lg:grid-cols-2 gap-4">
-          {report.explain_like_im_5 && (
-            <div>
-              <h3 className="text-xs font-semibold mb-2">
-                Teach me like I&apos;m 5
-              </h3>
-              <p className="text-[13px] text-slate-100">
-                {report.explain_like_im_5}
-              </p>
-            </div>
-          )}
+        <section className="grid gap-4">
           {report.cheat_sheet && report.cheat_sheet.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold mb-2">Cheat sheet</h3>

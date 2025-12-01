@@ -13,10 +13,6 @@ from app.schemas import (
 
 
 def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
-    """
-    Try to extract a JSON object from the LLM output.
-    If parsing fails, return {} so we can fall back to defaults.
-    """
     if not raw:
         return {}
     start = raw.find("{")
@@ -76,9 +72,6 @@ def generate_document_report(
     model: Optional[str] = None,
     max_chars: int = 20000,
 ) -> DocumentReport:
-    """
-    Build a rich study report for a single document, based on its stored chunks.
-    """
     raw_text = get_document_text(doc_name, max_chars=max_chars)
 
     llm = LLMClient()
@@ -87,7 +80,6 @@ def generate_document_report(
 
     data = _safe_parse_json_object(raw)
 
-    # Helpers
     def as_list_of_str(value: Any) -> List[str]:
         if not isinstance(value, list):
             return []
@@ -96,7 +88,6 @@ def generate_document_report(
             if isinstance(item, (str, int, float)):
                 out.append(str(item))
             elif isinstance(item, dict):
-                # flatten dict to "key: value" pairs
                 parts = []
                 for k, v in item.items():
                     parts.append(f"{k}: {v}")
@@ -108,7 +99,6 @@ def generate_document_report(
 
     executive_summary = str(data.get("executive_summary", "") or "")
 
-    # Sections
     sections_raw = data.get("sections", [])
     sections: List[ReportSection] = []
     if isinstance(sections_raw, list):
@@ -118,7 +108,6 @@ def generate_document_report(
                               or "").strip() or "Section"
                 content_val = item.get("content", "") or ""
                 if isinstance(content_val, list):
-                    # join multiple bullet strings into one text block
                     content = "\n\n".join(str(x) for x in content_val)
                 else:
                     content = str(content_val)
@@ -133,7 +122,6 @@ def generate_document_report(
 
     relationships = as_list_of_str(data.get("relationships", []))
 
-    # Knowledge graph edges
     kg_raw = data.get("knowledge_graph", [])
     knowledge_graph: List[KnowledgeGraphEdge] = []
     if isinstance(kg_raw, list):
@@ -150,7 +138,6 @@ def generate_document_report(
                     source=source, relation=relation, target=target)
             )
 
-    # Practice questions
     pq_raw = data.get("practice_questions", [])
     practice_questions: List[QAItem] = []
     if isinstance(pq_raw, list):

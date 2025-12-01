@@ -18,7 +18,6 @@ export default function RelationsOverlay({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
       <div className="w-full max-w-3xl max-h-[80vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col">
-        {/* Header */}
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold">Relations between documents</h2>
@@ -35,7 +34,6 @@ export default function RelationsOverlay({
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-auto px-4 py-3 text-sm">
           {loading && (
             <div className="h-full flex items-center justify-center text-slate-300">
@@ -51,7 +49,6 @@ export default function RelationsOverlay({
 
           {!loading && data && (
             <div className="space-y-4">
-              {/* Themes */}
               {data.global_themes && data.global_themes.length > 0 && (
                 <section>
                   <h3 className="text-xs font-semibold mb-1">Global themes</h3>
@@ -63,7 +60,6 @@ export default function RelationsOverlay({
                 </section>
               )}
 
-              {/* Relations list */}
               {data.relations && data.relations.length > 0 && (
                 <section>
                   <h3 className="text-xs font-semibold mb-2">

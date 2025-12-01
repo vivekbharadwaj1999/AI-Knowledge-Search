@@ -10,8 +10,8 @@ import openpyxl
 from app.vector_store import add_embeddings
 from app.config import EmbeddingClient
 
-CHUNK_SIZE = 800      # characters
-CHUNK_OVERLAP = 200   # characters
+CHUNK_SIZE = 800  
+CHUNK_OVERLAP = 200 
 UPLOAD_DIR = "data/raw"
 
 
@@ -33,13 +33,11 @@ def read_docx_text(file_path: str) -> str:
     doc = Document(file_path)
     parts: list[str] = []
 
-    # Paragraphs
     for para in doc.paragraphs:
         text = para.text.strip()
         if text:
             parts.append(text)
 
-    # Tables
     for table in doc.tables:
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells]
@@ -63,7 +61,7 @@ def read_pptx_text(file_path: str) -> str:
         if slide_lines:
             parts.append(f"Slide {slide_idx}:")
             parts.append("\n".join(slide_lines))
-            parts.append("")  # blank line between slides
+            parts.append("") 
 
     return "\n".join(parts)
 
@@ -76,13 +74,11 @@ def read_xlsx_text(file_path: str) -> str:
     sheets = pd.read_excel(file_path, sheet_name=None)
     parts: list[str] = []
 
-    # regex patterns
     week_pattern = re.compile(r"Week\s*\d+", re.IGNORECASE)
-    date_pattern = re.compile(r"\d{1,2}\s\w+\s\d{4}")   # "16 Nov 2025"
+    date_pattern = re.compile(r"\d{1,2}\s\w+\s\d{4}")  
 
     for sheet_name, df in sheets.items():
 
-        # Remove fully empty rows and columns
         df = df.dropna(how="all", axis=0).dropna(how="all", axis=1)
 
         if df.empty:
@@ -95,19 +91,15 @@ def read_xlsx_text(file_path: str) -> str:
         for _, row in df.iterrows():
             vals = [v.strip() for v in row.tolist()]
 
-            # Skip rows full of nan-like noise
             joined = " ".join(vals).lower()
             if joined.count("nan") > 4:
                 continue
 
-            # Skip rows that have too many empty values
             if vals.count("") > len(vals) * 0.7:
                 continue
 
-            # Convert to simple text
             row_str = ", ".join(vals)
 
-            # Keep only meaningful rows
             if (
                 "week" in joined
                 or date_pattern.search(row_str)

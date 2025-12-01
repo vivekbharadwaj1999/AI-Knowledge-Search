@@ -1,4 +1,3 @@
-// src/components/OutputPanel.tsx
 import type { DocumentReport } from "../api";
 import ReportPanel from "./ReportPanel";
 
@@ -32,7 +31,6 @@ export default function OutputPanel({
 }: OutputPanelProps) {
   return (
     <div className="space-y-6 text-sm sm:text-[15px]">
-      {/* Chat output */}
       <section>
         <h2 className="text-sm sm:text-base font-semibold mb-2">
           Answers & chat
@@ -59,7 +57,6 @@ export default function OutputPanel({
         </div>
       </section>
 
-      {/* Model comparison output */}
       <section>
         <h2 className="text-sm sm:text-base font-semibold mb-2">
           Model comparison
@@ -102,7 +99,6 @@ export default function OutputPanel({
         </div>
       </section>
 
-      {/* AI Study Report */}
       <section>
         <h2 className="text-sm sm:text-base font-semibold mb-2">
           AI Study Report

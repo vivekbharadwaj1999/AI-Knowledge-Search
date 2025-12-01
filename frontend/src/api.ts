@@ -1,4 +1,3 @@
-// src/api.ts
 import axios from "axios";
 
 const API_BASE =
@@ -92,27 +91,17 @@ export type QAItem = {
 export type DocumentReport = {
   doc_name: string;
   title?: string;
-
   executive_summary: string;
-
   sections: { heading: string; content: string }[];
-
   key_concepts: string[];
   concept_explanations: string[];
-
   relationships: string[];
-
   knowledge_graph: KnowledgeGraphEdge[];
-
   practice_questions: QAItem[];
-
   difficulty_level: "beginner" | "intermediate" | "advanced" | string;
   difficulty_explanation: string;
-
   study_path: string[];
-
   explain_like_im_5: string;
-
   cheat_sheet: string[];
 };
 
@@ -174,15 +163,12 @@ export type CritiqueResult = {
   question: string;
   answer_model: string;
   critic_model: string;
-
   answer: string;
   context: string[];
   sources?: SourceChunk[];
-
   answer_critique_markdown: string;
   prompt_feedback_markdown: string;
   improved_prompt: string;
   prompt_issue_tags?: PromptIssueTag[];
-
   scores?: CritiqueScores;
 };

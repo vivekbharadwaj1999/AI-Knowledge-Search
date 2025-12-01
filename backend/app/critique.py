@@ -1,4 +1,3 @@
-# backend/app/critique.py
 import json
 import os
 import re
@@ -87,25 +86,15 @@ def _safe_list_str(value: Any) -> List[str]:
 
 
 def _safe_json_parse(raw: str) -> Dict[str, Any] | None:
-    """
-    Try very hard to extract a JSON object from a messy model response.
-
-    Supports:
-    - plain JSON
-    - ```json ... ``` fenced blocks
-    - first {...} object inside the text
-    """
     raw = (raw or "").strip()
     if not raw:
         return None
 
-    # 1) direct JSON
     try:
         return json.loads(raw)
     except Exception:
         pass
 
-    # 2) fenced ```json ... ``` or ``` ... ``` blocks
     fenced = re.search(
         r"```(?:json)?\s*(\{.*?\})\s*```",
         raw,
@@ -118,7 +107,6 @@ def _safe_json_parse(raw: str) -> Dict[str, Any] | None:
         except Exception:
             pass
 
-    # 3) first {...} object anywhere in the string
     brace_match = re.search(r"\{.*\}", raw, re.DOTALL)
     if brace_match:
         block = brace_match.group(0)
@@ -163,7 +151,6 @@ def run_critique(
     3) Return a dict ready for CritiqueResponse.
     """
 
-    # Step 1: get answer from base QA
     answer, context, sources = answer_question(
         question,
         k=top_k,
@@ -171,22 +158,18 @@ def run_critique(
         model=answer_model,
     )
 
-    # Step 2: run critic model with strict-ish JSON prompt
     llm = LLMClient()
     critic = critic_model or GROQ_MODEL
     prompt = _build_critique_prompt(question, answer, context)
     raw = llm.complete(prompt, model=critic)
 
-    # Try to parse as JSON, but be robust to messy outputs
     parsed = _safe_json_parse(raw)
 
     if not parsed:
-        # Debug logs so you can see what came back
         print("Failed to parse critique JSON from model:", critic)
         print("Raw critique output:")
         print(raw)
 
-        # Fallback: treat raw as a free-form critique of the answer
         parsed = {
             "answer_critique_markdown": str(raw),
             "prompt_feedback_markdown": (
@@ -204,7 +187,6 @@ def run_critique(
     tags = _safe_list_str(parsed.get("prompt_issue_tags", []))
     scores = _safe_scores(parsed)
 
-    # Step 3: log to JSONL for later analysis
     os.makedirs("data", exist_ok=True)
     log_entry = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
