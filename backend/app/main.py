@@ -2,12 +2,23 @@ import os
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.schemas import AskRequest, AskResponse, InsightsRequest, InsightsResponse
+from app.schemas import (
+    AskRequest,
+    AskResponse,
+    InsightsRequest,
+    InsightsResponse,
+    ReportRequest,
+    DocumentReport,
+    CrossDocRelationsRequest,
+    CrossDocRelations,
+)
 from app.ingest import ingest_file, UPLOAD_DIR
 from app.qa import answer_question
 from app.vector_store import list_documents, clear_vector_store
 from app.config import GROQ_MODEL
 from app.insights import generate_insights
+from app.report import generate_document_report
+from app.relations import analyze_cross_document_relations
 
 app = FastAPI(title="AI Knowledge Search Engine")
 
@@ -97,6 +108,47 @@ async def insights_route(payload: InsightsRequest):
 @app.get("/documents")
 async def get_documents():
     return {"documents": list_documents()}
+
+
+@app.post("/report", response_model=DocumentReport)
+def create_report(req: ReportRequest):
+    """
+    Turn a single uploaded document into a rich AI-generated study report.
+    """
+    try:
+        report = generate_document_report(
+            doc_name=req.doc_name,
+            model=req.model,
+        )
+        return report
+    except ValueError as e:
+        # e.g. no chunks found for doc_name
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print("Error generating report:", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to generate document report"
+        )
+
+
+@app.post("/document-relations", response_model=CrossDocRelations)
+async def document_relations_route(payload: CrossDocRelationsRequest):
+    """
+    Analyze how all uploaded documents relate to each other.
+    Requires at least 2 documents in the vector store.
+    """
+    try:
+        result = analyze_cross_document_relations(model=payload.model)
+        return result
+    except ValueError as e:
+        # e.g. not enough documents
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print("Error in /document-relations:", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to analyze document relations",
+        )
 
 
 @app.delete("/documents")

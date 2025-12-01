@@ -77,3 +77,69 @@ export async function clearDocuments() {
   const res = await axios.delete(`${API_BASE}/documents`);
   return res.data as { status: string; message: string };
 }
+
+export type KnowledgeGraphEdge = {
+  source: string;
+  relation: string;
+  target: string;
+};
+
+export type QAItem = {
+  question: string;
+  answer: string;
+};
+
+export type DocumentReport = {
+  doc_name: string;
+  title?: string;
+
+  executive_summary: string;
+
+  sections: { heading: string; content: string }[];
+
+  key_concepts: string[];
+  concept_explanations: string[];
+
+  relationships: string[];
+
+  knowledge_graph: KnowledgeGraphEdge[];
+
+  practice_questions: QAItem[];
+
+  difficulty_level: "beginner" | "intermediate" | "advanced" | string;
+  difficulty_explanation: string;
+
+  study_path: string[];
+
+  explain_like_im_5: string;
+
+  cheat_sheet: string[];
+};
+
+export async function generateReport(params: {
+  doc_name: string;
+  model?: string;
+}): Promise<DocumentReport> {
+  const res = await axios.post(`${API_BASE}/report`, params);
+  return res.data as DocumentReport;
+}
+
+export type DocPairRelation = {
+  doc_a: string;
+  doc_b: string;
+  similarity: number;
+  relationship: string;
+};
+
+export type CrossDocRelations = {
+  documents: string[];
+  global_themes: string[];
+  relations: DocPairRelation[];
+};
+
+export async function fetchDocumentRelations(params?: {
+  model?: string;
+}): Promise<CrossDocRelations> {
+  const res = await axios.post(`${API_BASE}/document-relations`, params || {});
+  return res.data as CrossDocRelations;
+}

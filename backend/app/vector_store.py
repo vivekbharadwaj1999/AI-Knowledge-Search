@@ -121,6 +121,30 @@ def similarity_search(
     return results[:k]
 
 
+def get_document_text(doc_name: str, max_chars: int = 20000) -> str:
+    """
+    Concatenate all text chunks for a given document name.
+
+    Raises ValueError if no chunks are found.
+    """
+    records = _load_records()
+    chunks: List[str] = []
+
+    for rec in records:
+        if rec.get("doc_name") == doc_name:
+            text = rec.get("text") or ""
+            if isinstance(text, str):
+                chunks.append(text)
+
+    if not chunks:
+        raise ValueError(f"No chunks found for document: {doc_name}")
+
+    full_text = "\n\n".join(chunks)
+    if max_chars is not None and len(full_text) > max_chars:
+        return full_text[:max_chars]
+    return full_text
+
+
 def list_documents() -> List[str]:
     names = set()
     for rec in _load_records():
@@ -128,6 +152,81 @@ def list_documents() -> List[str]:
         if name:
             names.add(name)
     return sorted(names)
+
+
+def get_document_embeddings() -> Dict[str, List[float]]:
+    """
+    Represent each document by the FIRST chunk embedding, based on chunk index.
+    This prevents chunk-order randomness and avoids inflating similarity.
+    """
+    records = _load_records()
+
+    # collect chunks with explicit ordering
+    chunks_by_doc: Dict[str, List[dict]] = {}
+
+    for rec in records:
+        doc = rec.get("doc_name")
+        emb = rec.get("embedding")
+        text = rec.get("text")
+
+        if not doc or not isinstance(emb, list):
+            continue
+
+        # try get chunk index from known keys
+        chunk_index = rec.get("chunk_index")
+        if chunk_index is None:
+            chunk_index = rec.get("chunk")
+        if chunk_index is None:
+            chunk_index = rec.get("index")
+        if chunk_index is None:
+            # fallback: treat ordering as 99999 (should never be chosen first)
+            chunk_index = 99999
+
+        chunks_by_doc.setdefault(doc, []).append({
+            "idx": chunk_index,
+            "embedding": emb
+        })
+
+    # now pick FIRST chunk per doc
+    doc_vectors: Dict[str, List[float]] = {}
+
+    for doc, chunks in chunks_by_doc.items():
+        # sort properly
+        chunks.sort(key=lambda x: x["idx"])
+        first = chunks[0]
+        doc_vectors[doc] = first["embedding"]
+
+    return doc_vectors
+
+
+def get_document_previews(max_chars_per_doc: int = 1200) -> Dict[str, str]:
+    """
+    Build a short text preview for each document by concatenating its chunks.
+    """
+    records = _load_records()
+    texts_by_doc: Dict[str, str] = {}
+
+    for rec in records:
+        doc = rec.get("doc_name")
+        text = rec.get("text") or ""
+        if not doc or not text:
+            continue
+
+        current = texts_by_doc.get(doc, "")
+        if len(current) >= max_chars_per_doc:
+            continue
+
+        remaining = max_chars_per_doc - len(current)
+        if remaining <= 0:
+            continue
+
+        addition = text[:remaining]
+        if current:
+            texts_by_doc[doc] = current + "\n\n" + addition
+        else:
+            texts_by_doc[doc] = addition
+
+    return texts_by_doc
 
 
 def clear_vector_store() -> None:
