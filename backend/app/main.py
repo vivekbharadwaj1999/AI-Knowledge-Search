@@ -11,6 +11,8 @@ from app.schemas import (
     DocumentReport,
     CrossDocRelationsRequest,
     CrossDocRelations,
+    CritiqueRequest,
+    CritiqueResponse,
 )
 from app.ingest import ingest_file, UPLOAD_DIR
 from app.qa import answer_question
@@ -19,6 +21,7 @@ from app.config import GROQ_MODEL
 from app.insights import generate_insights
 from app.report import generate_document_report
 from app.relations import analyze_cross_document_relations
+from app.critique import run_critique
 
 app = FastAPI(title="AI Knowledge Search Engine")
 
@@ -29,7 +32,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,          # MUST NOT include "*"
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -101,7 +104,6 @@ async def insights_route(payload: InsightsRequest):
         context=payload.context,
         model=payload.model,
     )
-    # Pydantic will validate / coerce the dict into InsightsResponse
     return InsightsResponse(**data)
 
 
@@ -112,9 +114,6 @@ async def get_documents():
 
 @app.post("/report", response_model=DocumentReport)
 def create_report(req: ReportRequest):
-    """
-    Turn a single uploaded document into a rich AI-generated study report.
-    """
     try:
         report = generate_document_report(
             doc_name=req.doc_name,
@@ -122,7 +121,6 @@ def create_report(req: ReportRequest):
         )
         return report
     except ValueError as e:
-        # e.g. no chunks found for doc_name
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         print("Error generating report:", e)
@@ -133,15 +131,10 @@ def create_report(req: ReportRequest):
 
 @app.post("/document-relations", response_model=CrossDocRelations)
 async def document_relations_route(payload: CrossDocRelationsRequest):
-    """
-    Analyze how all uploaded documents relate to each other.
-    Requires at least 2 documents in the vector store.
-    """
     try:
         result = analyze_cross_document_relations(model=payload.model)
         return result
     except ValueError as e:
-        # e.g. not enough documents
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print("Error in /document-relations:", e)
@@ -149,6 +142,21 @@ async def document_relations_route(payload: CrossDocRelationsRequest):
             status_code=500,
             detail="Failed to analyze document relations",
         )
+
+
+@app.post("/critique", response_model=CritiqueResponse)
+async def critique_route(payload: CritiqueRequest):
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    data = run_critique(
+        question=payload.question,
+        answer_model=payload.answer_model,
+        critic_model=payload.critic_model,
+        top_k=payload.top_k,
+        doc_name=payload.doc_name,
+    )
+    return CritiqueResponse(**data)
 
 
 @app.delete("/documents")

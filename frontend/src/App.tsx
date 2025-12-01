@@ -1,9 +1,8 @@
 // src/App.tsx
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useLayoutEffect, useState, type KeyboardEvent } from "react";
 import UploadPanel from "./components/UploadPanel";
 import AskControls from "./components/AskPanel";
 import ReportPanel from "./components/ReportPanel";
-
 import ReactMarkdown from "react-markdown";
 
 import {
@@ -13,6 +12,10 @@ import {
   askQuestion,
   generateInsights,
   fetchDocumentRelations,
+  runCritique,
+  type CritiqueResult,
+  type PromptIssueTag,
+  type CritiqueScores,
 } from "./api";
 
 import type {
@@ -38,6 +41,114 @@ function MarkdownText({ text }: { text: string }) {
                  prose-p:my-1 prose-li:my-0.5 prose-ul:ml-4 prose-ol:ml-4"
     >
       <ReactMarkdown>{cleaned}</ReactMarkdown>
+    </div>
+  );
+}
+
+const PROMPT_TIP_LABELS: Record<PromptIssueTag, string> = {
+  missing_context: "Add more context",
+  too_vague: "Make your question more specific",
+  no_format_specified: "Specify the output format",
+  length_unspecified: "Mention how long/short the answer should be",
+  ambiguous_audience: "Say who the answer is for",
+  multi_question: "Split multiple questions into separate prompts",
+};
+
+function PromptTipsChips({ tags }: { tags: PromptIssueTag[] }) {
+  if (!tags || tags.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1 mb-2">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full
+                     bg-amber-500/10 border border-amber-500/40 text-amber-200"
+        >
+          <span>⚠️</span>
+          <span>{PROMPT_TIP_LABELS[tag] ?? tag}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PromptBeforeAfter({
+  original,
+  improved,
+}: {
+  original: string;
+  improved: string;
+}) {
+  return (
+    <div className="mt-2 space-y-2 text-xs">
+      <div className="rounded-lg bg-slate-950/70 border border-slate-800 p-2">
+        <div className="text-[10px] font-semibold uppercase text-slate-400 mb-1">
+          Before
+        </div>
+        <div className="whitespace-pre-wrap break-words text-slate-200">
+          {original}
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-emerald-950/40 border border-emerald-700/60 p-2">
+        <div className="text-[10px] font-semibold uppercase text-emerald-300 mb-1">
+          After (Improved prompt)
+        </div>
+        <div className="whitespace-pre-wrap break-words text-emerald-50">
+          {improved}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type ScoreKey = "correctness" | "completeness" | "clarity" | "hallucination_risk";
+
+const SCORE_LABELS: Record<ScoreKey, string> = {
+  correctness: "Correctness",
+  completeness: "Completeness",
+  clarity: "Clarity",
+  hallucination_risk: "Hallucination",
+};
+
+function ScorePills({ scores }: { scores?: CritiqueScores }) {
+  if (!scores) return null;
+
+  const entries = Object.entries(scores)
+    .filter(([, v]) => typeof v === "number")
+    .map(([k, v]) => [k as ScoreKey, v as number]);
+
+  if (!entries.length) return null;
+
+  const getColor = (key: ScoreKey, value: number) => {
+    // value is 0 → 1
+    if (key === "hallucination_risk") {
+      // reversed (high risk = bad)
+      if (value >= 0.66) return "bg-red-900/60 border-red-600 text-red-300";
+      if (value >= 0.33) return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
+      return "bg-green-900/40 border-green-600 text-green-200";
+    }
+
+    // normal metrics (high = good)
+    if (value >= 0.66) return "bg-green-900/40 border-green-600 text-green-200";
+    if (value >= 0.33) return "bg-yellow-900/40 border-yellow-600 text-yellow-200";
+    return "bg-red-900/60 border-red-600 text-red-300";
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {entries.map(([key, value]) => (
+        <span
+          key={key}
+          className={
+            "inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-medium " +
+            getColor(key, value)
+          }
+        >
+          {SCORE_LABELS[key]}: {Math.round(value * 100)}%
+        </span>
+      ))}
     </div>
   );
 }
@@ -75,6 +186,10 @@ export type Comparison = {
     context: string[];
     sources?: SourceChunk[];
   };
+};
+
+type CritiqueRun = CritiqueResult & {
+  id: number;
 };
 
 const STOPWORDS = new Set([
@@ -322,7 +437,7 @@ function DocumentSelector({
           or single document:
         </span>
         <select
-          disabled={documents.length === 0}
+          disabled={documents.length === 0 || useAllDocs}
           value={selectedDoc ?? ""}
           onChange={handleSelectChange}
           className="w-full sm:flex-1 min-w-0 rounded-md bg-slate-900 border border-slate-700
@@ -355,6 +470,10 @@ type OutputEntryBase =
     comparisonId: number;
   }
   | {
+    kind: "critique";
+    critiqueId: number;
+  }
+  | {
     kind: "report";
     docName?: string;
     report: DocumentReport;
@@ -363,6 +482,7 @@ type OutputEntryBase =
     kind: "relations";
     relations: CrossDocRelations;
   };
+
 
 type OutputEntry = OutputEntryBase & {
   id: number;
@@ -374,6 +494,9 @@ function App() {
   const [docVersion, setDocVersion] = useState(0);
   const [useAllDocs, setUseAllDocs] = useState<boolean>(false);
   const [outputFeed, setOutputFeed] = useState<OutputEntry[]>([]);
+  const askInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const leftColumnRef = useRef<HTMLElement | null>(null);
+  const [rightMaxHeight, setRightMaxHeight] = useState<number | undefined>();
 
   const appendOutput = (entry: OutputEntryBase) => {
     setOutputFeed((prev): OutputEntry[] => [
@@ -392,7 +515,6 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [topK, setTopK] = useState(5);
   const [modelId, setModelId] = useState<string>("llama-3.1-8b-instant");
-
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("ai");
   const [showContextFor, setShowContextFor] = useState<number | null>(null);
 
@@ -402,6 +524,13 @@ function App() {
   const [modelRight, setModelRight] = useState("llama-3.3-70b-versatile");
   const [comparisons, setComparisons] = useState<Comparison[]>([]);
   const [isCompareLoading, setIsCompareLoading] = useState(false);
+
+  /* Critique */
+  const [critiqueQuestion, setCritiqueQuestion] = useState("");
+  const [answerModelId, setAnswerModelId] = useState("llama-3.1-8b-instant");
+  const [criticModelId, setCriticModelId] = useState("llama-3.3-70b-versatile");
+  const [critiques, setCritiques] = useState<CritiqueRun[]>([]);
+  const [isCritiqueLoading, setIsCritiqueLoading] = useState(false);
 
   /* Relations */
   const [relationsLoading, setRelationsLoading] = useState(false);
@@ -425,6 +554,21 @@ function App() {
         console.error("Failed to fetch documents", err);
       });
   }, [docVersion]);
+
+  useLayoutEffect(() => {
+    function updateHeight() {
+      // only clamp on desktop (Tailwind lg breakpoint ~= 1024px)
+      if (window.innerWidth >= 1024 && leftColumnRef.current) {
+        setRightMaxHeight(leftColumnRef.current.offsetHeight);
+      } else {
+        setRightMaxHeight(undefined);
+      }
+    }
+
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    return () => window.removeEventListener("resize", updateHeight);
+  });
 
   /* Clear all */
   const handleClearAll = async () => {
@@ -621,6 +765,41 @@ function App() {
     }
   };
 
+  /* Critique */
+  const canCritique =
+    critiqueQuestion.trim().length > 0 &&
+    !isCritiqueLoading &&
+    documents.length > 0;
+
+  const handleCritique = async () => {
+    if (!canCritique) return;
+    setIsCritiqueLoading(true);
+    const trimmed = critiqueQuestion.trim();
+
+    try {
+      const result = await runCritique({
+        question: trimmed,
+        answer_model: answerModelId,
+        critic_model: criticModelId,
+        top_k: topK,
+        doc_name: useAllDocs ? undefined : selectedDoc,
+      });
+
+      const nextId =
+        critiques.length > 0 ? critiques[critiques.length - 1].id + 1 : 1;
+      const run: CritiqueRun = { ...result, id: nextId };
+
+      setCritiques((prev) => [...prev, run]);
+      appendOutput({ kind: "critique", critiqueId: nextId });
+
+    } catch (err) {
+      console.error("Critique failed", err);
+      alert("Critique failed. Check console for details.");
+    } finally {
+      setIsCritiqueLoading(false);
+    }
+  };
+
   /* Relations */
   const handleAnalyzeRelations = async () => {
     if (!useAllDocs) {
@@ -666,7 +845,9 @@ function App() {
       {/* Main */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* LEFT column */}
-        <section className="w-full lg:w-1/2 border-b-0 lg:border-r border-slate-800 flex flex-col">
+        <section
+          ref={leftColumnRef}
+          className="w-full lg:w-1/2 border-b-0 lg:border-r border-slate-800 flex flex-col">
           {/* 1. Upload */}
           <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-slate-800">
             <h2 className="text-sm sm:text-base font-semibold mb-3">
@@ -743,6 +924,7 @@ function App() {
               setModelRight={setModelRight}
               canCompare={false}
               isCompareLoading={false}
+              askInputRef={askInputRef}
             />
           </div>
 
@@ -784,6 +966,15 @@ function App() {
                     <option value="openai/gpt-oss-120b">
                       GPT-OSS 120B (OpenAI OSS, large)
                     </option>
+                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
+                      LLaMA 4 Maverick 17B (preview)
+                    </option>
+                    <option value="qwen/qwen3-32b">
+                      Qwen3 32B (multilingual)
+                    </option>
+                    <option value="groq/compound">
+                      Groq Compound (system)
+                    </option>
                   </select>
                 </div>
 
@@ -793,8 +984,8 @@ function App() {
                   </label>
                   <select
                     className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
-                    value={modelRight}
-                    onChange={(e) => setModelRight(e.target.value)}
+                    value={modelLeft}
+                    onChange={(e) => setModelLeft(e.target.value)}
                   >
                     <option value="llama-3.1-8b-instant">
                       LLaMA 3.1 8B (fast)
@@ -807,6 +998,15 @@ function App() {
                     </option>
                     <option value="openai/gpt-oss-120b">
                       GPT-OSS 120B (OpenAI OSS, large)
+                    </option>
+                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
+                      LLaMA 4 Maverick 17B (preview)
+                    </option>
+                    <option value="qwen/qwen3-32b">
+                      Qwen3 32B (multilingual)
+                    </option>
+                    <option value="groq/compound">
+                      Groq Compound (system)
                     </option>
                   </select>
                 </div>
@@ -824,11 +1024,124 @@ function App() {
               </div>
             </div>
           </div>
+          {/* 5. Critique answer & prompt */}
+          <div className="px-4 sm:px-6 py-4 border-t border-slate-800">
+            <h2 className="text-sm sm:text-base font-semibold mb-2">
+              5. Critique answer & prompt
+            </h2>
+            <p className="text-[11px] text-slate-400 mb-2">
+              Let one model answer, and another model critique the answer and
+              your prompt. This turns each run into a little prompt-coaching
+              lesson.
+            </p>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] text-slate-400 mb-0.5">
+                Question to critique
+              </label>
+              <textarea
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                rows={2}
+                placeholder="Ask something you want to improve, e.g. &quot;Explain GDPR&quot;..."
+                value={critiqueQuestion}
+                onChange={(e) => setCritiqueQuestion(e.target.value)}
+              />
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex-1">
+                  <label className="block text-[11px] text-slate-400 mb-0.5">
+                    Answer model
+                  </label>
+                  <select
+                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                    value={answerModelId}
+                    onChange={(e) => setAnswerModelId(e.target.value)}
+                  >
+                    <option value="llama-3.1-8b-instant">
+                      LLaMA 3.1 8B (fast)
+                    </option>
+                    <option value="llama-3.3-70b-versatile">
+                      LLaMA 3.3 70B (quality)
+                    </option>
+                    <option value="openai/gpt-oss-20b">
+                      GPT-OSS 20B (OpenAI OSS)
+                    </option>
+                    <option value="openai/gpt-oss-120b">
+                      GPT-OSS 120B (OpenAI OSS, large)
+                    </option>
+                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
+                      LLaMA 4 Maverick 17B (preview)
+                    </option>
+                    <option value="qwen/qwen3-32b">
+                      Qwen3 32B (multilingual)
+                    </option>
+                    <option value="groq/compound">
+                      Groq Compound (system)
+                    </option>
+                  </select>
+                </div>
+
+                <div className="flex-1">
+                  <label className="block text-[11px] text-slate-400 mb-0.5">
+                    Critic model
+                  </label>
+                  <select
+                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                    value={criticModelId}
+                    onChange={(e) => setCriticModelId(e.target.value)}
+                  >
+                    <option value="llama-3.1-8b-instant">
+                      LLaMA 3.1 8B (fast)
+                    </option>
+                    <option value="llama-3.3-70b-versatile">
+                      LLaMA 3.3 70B (quality)
+                    </option>
+                    <option value="openai/gpt-oss-20b">
+                      GPT-OSS 20B (OpenAI OSS)
+                    </option>
+                    <option value="openai/gpt-oss-120b">
+                      GPT-OSS 120B (OpenAI OSS, large)
+                    </option>
+                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
+                      LLaMA 4 Maverick 17B (preview)
+                    </option>
+                    <option value="qwen/qwen3-32b">
+                      Qwen3 32B (multilingual)
+                    </option>
+                    <option value="groq/compound">
+                      Groq Compound (system)
+                    </option>
+                    <option value="meta-llama/llama-guard-4-12b">
+                      LLaMA Guard 4 12B (safety classifier against disallowed content)
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleCritique}
+                  disabled={!canCritique}
+                  className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium
+                             bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCritiqueLoading ? "Critiquing…" : "Critique answer & prompt"}
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* RIGHT column */}
-        <section className="w-full lg:w-1/2 flex flex-col max-h-[calc(100vh-3.25rem)]">
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+        <section
+          className="w-full lg:w-1/2 flex flex-col"
+          style={
+            rightMaxHeight
+              ? { maxHeight: rightMaxHeight, overflowY: "auto" }
+              : undefined
+          }>
+          <div className="flex-1 px-4 sm:px-6 py-4">
             <h2 className="text-sm sm:text-base font-semibold mb-3">Output</h2>
 
             {outputFeed.length === 0 ? (
@@ -1157,6 +1470,114 @@ function App() {
                             <div className="text-xs sm:text-[13px] text-slate-100 leading-relaxed">
                               <MarkdownText text={cmp.right.answer} />
                             </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (entry.kind === "critique") {
+                    const crt = critiques.find(
+                      (c) => c.id === entry.critiqueId
+                    );
+                    if (!crt) return null;
+
+                    return (
+                      <div
+                        key={entry.id}
+                        className="border border-slate-800 rounded-xl bg-slate-900/40 p-3 sm:p-4 space-y-3"
+                      >
+                        {/* Header row */}
+                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                          <span className="font-semibold text-slate-100">
+                            Critique: answer & prompt
+                          </span>
+                          <span>
+                            {crt.answer_model} (answer) · {crt.critic_model} (critic)
+                          </span>
+                        </div>
+
+                        {/* Question */}
+                        <div>
+                          <div className="text-[11px] text-sky-300">Question</div>
+                          <div className="text-xs sm:text-[13px] text-slate-100 leading-relaxed">
+                            <MarkdownText text={crt.question} />
+                          </div>
+                        </div>
+
+                        {/* Prompt tips (chips) */}
+                        {crt.prompt_issue_tags && crt.prompt_issue_tags.length > 0 && (
+                          <PromptTipsChips
+                            tags={crt.prompt_issue_tags as PromptIssueTag[]}
+                          />
+                        )}
+
+                        {/* Answer quality – answer + answer critique side by side */}
+                        <div className="space-y-2">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-800 pb-1">
+                            Answer quality
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {/* Left: Answer */}
+                            <div className="space-y-1">
+                              <div className="text-[11px] font-semibold text-slate-300">
+                                Answer (base model)
+                              </div>
+                              <div className="rounded-lg bg-slate-950/60 border border-slate-800 p-2 text-xs break-words overflow-auto">
+                                <MarkdownText text={crt.answer} />
+                              </div>
+                            </div>
+
+                            {/* Right: Answer critique + scores */}
+                            <div className="space-y-1">
+                              <div className="text-[11px] font-semibold text-slate-300">
+                                Answer critique
+                              </div>
+                              <ScorePills scores={crt.scores} />
+                              <div className="rounded-lg bg-slate-950/60 border border-amber-900 p-2 text-xs break-words overflow-auto">
+                                <MarkdownText text={crt.answer_critique_markdown} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Prompt coaching full width */}
+                        <div className="space-y-2 border-t border-slate-800 pt-3">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-400">
+                            Prompt issues & improved prompt
+                          </div>
+
+                          <div className="text-[11px] font-semibold text-emerald-300">
+                            Prompt coaching
+                          </div>
+
+                          <div className="rounded-lg bg-slate-950/60 border border-emerald-900 p-2 text-xs break-words max-h-64 overflow-auto">
+                            <MarkdownText text={crt.prompt_feedback_markdown} />
+                          </div>
+
+                          {/* Before/After stacked */}
+                          <PromptBeforeAfter
+                            original={crt.question}
+                            improved={crt.improved_prompt}
+                          />
+
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setQuestion(crt.improved_prompt);
+                                askInputRef.current?.focus();
+                                askInputRef.current?.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "center",
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-emerald-500/60
+                     text-[11px] text-emerald-100 hover:bg-emerald-500/10"
+                            >
+                              Use this prompt in Ask
+                            </button>
                           </div>
                         </div>
                       </div>
