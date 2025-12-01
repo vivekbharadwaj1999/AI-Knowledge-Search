@@ -937,7 +937,7 @@ function App() {
                   </label>
                   <select
                     className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
-                    value={modelLeft}
+                    value={modelRight}
                     onChange={(e) => setModelLeft(e.target.value)}
                   >
                     <option value="llama-3.1-8b-instant">
