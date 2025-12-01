@@ -1,4 +1,3 @@
-# backend/app/insights.py
 import json
 from typing import Any, Dict, List, Optional
 
@@ -46,10 +45,6 @@ IMPORTANT:
 
 
 def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
-    """
-    Try to extract a JSON object from the LLM output.
-    If parsing fails, return {} so we can fall back to defaults.
-    """
     start = raw.find("{")
     end = raw.rfind("}")
     if start == -1 or end == -1 or end <= start:
@@ -74,7 +69,6 @@ def generate_insights(
 
     data = _safe_parse_json_object(raw)
 
-    # Helper: turn any list-like into list[str]
     def as_list_of_str(value: Any) -> List[str]:
         if not isinstance(value, list):
             return []
@@ -85,7 +79,6 @@ def generate_insights(
             elif isinstance(item, (int, float)):
                 out.append(str(item))
             elif isinstance(item, dict):
-                # LLM sometimes returns {"name": "...", "type": "..."}
                 name = item.get("name")
                 t = item.get("type") or item.get("category")
                 if name and t:
@@ -98,7 +91,6 @@ def generate_insights(
                 out.append(str(item))
         return out
 
-    # --- main scalar fields ---
     summary = str(data.get("summary", "") or "")
 
     key_points = as_list_of_str(data.get("key_points", []))
@@ -106,10 +98,8 @@ def generate_insights(
     suggested_questions = as_list_of_str(data.get("suggested_questions", []))
     keywords = as_list_of_str(data.get("keywords", []))
 
-    # mindmap can be string OR list/structure → turn into a single string
     mindmap_raw = data.get("mindmap", "")
     if isinstance(mindmap_raw, list):
-        # flatten any nested list/objects to strings
         flat = as_list_of_str(mindmap_raw)
         mindmap = "\n".join(flat)
     else:
@@ -118,7 +108,6 @@ def generate_insights(
     reading_difficulty = str(data.get("reading_difficulty", "") or "")
     sentiment = str(data.get("sentiment", "") or "")
 
-    # --- optional LLM-driven highlights: List[List[str]] ---
     highlights_raw = data.get("highlights", [])
     highlights: List[List[str]] = []
     if isinstance(highlights_raw, list):
@@ -127,7 +116,6 @@ def generate_insights(
     else:
         highlights = []
 
-    # sentence_importance: [{ sentence, score }]
     sent_raw = data.get("sentence_importance", [])
     sentence_importance: List[Dict[str, Any]] = []
     if isinstance(sent_raw, list):

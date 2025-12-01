@@ -8,11 +8,9 @@ body {
     sans-serif;
 }
 
-/* Dark scrollbars to match the app theme */
 * {
   scrollbar-width: thin;
   scrollbar-color: #475569 #020617;
-  /* thumb, track */
 }
 
 *::-webkit-scrollbar {

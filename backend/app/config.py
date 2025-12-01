@@ -1,4 +1,3 @@
-# config.py
 import os
 import hashlib
 from typing import List, Optional
@@ -35,7 +34,6 @@ class EmbeddingClient:
 
     def _fake_embed(self, text: str) -> List[float]:
         h = hashlib.sha256(text.encode("utf-8")).digest()
-        # take first 32 bytes -> floats in [0,1]
         return [b / 255.0 for b in h[:32]]
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -46,20 +44,14 @@ class EmbeddingClient:
 
 
 class LLMClient:
-    """
-    Uses Groq chat.completions API to generate answers.
-    """
 
     def __init__(self):
         self.client = get_groq_client()
 
     def complete(self, prompt: str, model: Optional[str] = None) -> str:
-        # If no model override is provided, fall back to the default in env
         chosen_model = model or GROQ_MODEL
 
-        # 👇 hard-block deprecated models
         if chosen_model in DEPRECATED_MODEL_FALLBACKS:
-            # optional: print so you can see it happened
             print(f"[LLMClient] Model '{chosen_model}' deprecated, "
                   f"using '{DEPRECATED_MODEL_FALLBACKS[chosen_model]}' instead.")
             chosen_model = DEPRECATED_MODEL_FALLBACKS[chosen_model]

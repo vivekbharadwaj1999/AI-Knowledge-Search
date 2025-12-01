@@ -1,4 +1,3 @@
-// src/components/AskPanel.tsx
 import type { KeyboardEvent, RefObject } from "react";
 import type { AutoInsights, SourceChunk } from "../api";
 
@@ -51,10 +50,6 @@ const MODEL_OPTIONS = [
     label: "Groq Compound (system)",
   },
 ] as const;
-
-/* ──────────────────────────────────────────
-   CONTROLS (left column)
-   ────────────────────────────────────────── */
 
 export type AskControlsProps = {
   selectedDoc?: string;
@@ -132,7 +127,6 @@ export default function AskControls({
         </div>
       </div>
 
-      {/* Ask controls */}
       <div className="space-y-2">
         <h3 className="font-semibold text-sm sm:text-base">Ask questions</h3>
         <div className="flex gap-2">

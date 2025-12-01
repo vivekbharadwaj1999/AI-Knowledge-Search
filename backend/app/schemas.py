@@ -6,7 +6,6 @@ class AskRequest(BaseModel):
     question: str
     top_k: int = 5
     doc_name: Optional[str] = None
-    # 🔧 optional override for the LLM model (e.g. "llama-3.1-8b-instant")
     model: Optional[str] = None
 
 
@@ -19,23 +18,20 @@ class SourceChunk(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     context: List[str]
-    # which model actually answered (defaults to GROQ_MODEL)
     model_used: str
-    # detailed per-chunk metadata (doc + score)
     sources: List[SourceChunk] = []
 
 
 class InsightsRequest(BaseModel):
-    # we generate insights *about* a specific QA turn
     question: str
     answer: str
     context: List[str]
-    model: Optional[str] = None  # allow overriding model for insights too
+    model: Optional[str] = None
 
 
 class SentenceImportance(BaseModel):
     sentence: str
-    score: int  # 0–5
+    score: int
 
 
 class InsightsResponse(BaseModel):
@@ -68,7 +64,6 @@ class KnowledgeGraphEdge(BaseModel):
 
 
 class DocumentReport(BaseModel):
-    # we use doc_name (same as elsewhere in your app)
     doc_name: str
     title: Optional[str] = None
 
@@ -94,7 +89,6 @@ class DocumentReport(BaseModel):
 
 class ReportRequest(BaseModel):
     doc_name: str
-    # optional override for model (same pattern as AskRequest)
     model: Optional[str] = None
 
 
@@ -112,10 +106,7 @@ class CrossDocRelations(BaseModel):
 
 
 class CrossDocRelationsRequest(BaseModel):
-    # optional model override, same idea as AskRequest
     model: Optional[str] = None
-
-# Prompt coaching / critique
 
 
 class CritiqueScores(BaseModel):
