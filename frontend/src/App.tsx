@@ -1029,15 +1029,10 @@ function App() {
             <h2 className="text-sm sm:text-base font-semibold mb-2">
               5. Critique answer & prompt
             </h2>
-            <p className="text-[11px] text-slate-400 mb-2">
-              Let one model answer, and another model critique the answer and
-              your prompt. This turns each run into a little prompt-coaching
-              lesson.
-            </p>
 
             <div className="space-y-2">
               <label className="block text-[11px] text-slate-400 mb-0.5">
-                Question to critique
+                Ask Question
               </label>
               <textarea
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
