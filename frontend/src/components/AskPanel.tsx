@@ -1,5 +1,5 @@
 // src/components/AskPanel.tsx
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 import type { AutoInsights, SourceChunk } from "../api";
 
 export type HighlightMode = "ai" | "keywords" | "sentences" | "off";
@@ -38,6 +38,18 @@ const MODEL_OPTIONS = [
   { id: "llama-3.3-70b-versatile", label: "LLaMA 3.3 70B (quality)" },
   { id: "openai/gpt-oss-20b", label: "GPT-OSS 20B (OpenAI OSS)" },
   { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B (OpenAI OSS, large)" },
+  {
+    id: "meta-llama/llama-4-maverick-17b-128e-instruct",
+    label: "LLaMA 4 Maverick 17B (preview)",
+  },
+  {
+    id: "qwen/qwen3-32b",
+    label: "Qwen3 32B (multilingual)",
+  },
+  {
+    id: "groq/compound",
+    label: "Groq Compound (system)",
+  },
 ] as const;
 
 /* ──────────────────────────────────────────
@@ -56,9 +68,6 @@ export type AskControlsProps = {
   isLoading: boolean;
   onAsk: () => void;
   onQuestionKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
-
-  // compare props kept for compatibility with App.tsx,
-  // but we don't render any compare UI here anymore
   compareQuestion: string;
   setCompareQuestion: (v: string) => void;
   modelLeft: string;
@@ -67,6 +76,7 @@ export type AskControlsProps = {
   setModelRight: (v: string) => void;
   canCompare: boolean;
   isCompareLoading: boolean;
+  askInputRef?: RefObject<HTMLTextAreaElement>;
 };
 
 export default function AskControls({
@@ -81,6 +91,7 @@ export default function AskControls({
   isLoading,
   onAsk,
   onQuestionKeyDown,
+  askInputRef,
 }: AskControlsProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -126,6 +137,7 @@ export default function AskControls({
         <h3 className="font-semibold text-sm sm:text-base">Ask questions</h3>
         <div className="flex gap-2">
           <textarea
+            ref={askInputRef}
             className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
                        focus:outline-none focus:ring-2 focus:ring-sky-500"
             rows={2}

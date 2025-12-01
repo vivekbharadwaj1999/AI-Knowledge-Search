@@ -143,3 +143,46 @@ export async function fetchDocumentRelations(params?: {
   const res = await axios.post(`${API_BASE}/document-relations`, params || {});
   return res.data as CrossDocRelations;
 }
+
+export async function runCritique(params: {
+  question: string;
+  answer_model: string;
+  critic_model?: string;
+  top_k?: number;
+  doc_name?: string;
+}): Promise<CritiqueResult> {
+  const res = await axios.post(`${API_BASE}/critique`, params);
+  return res.data as CritiqueResult;
+}
+
+export type PromptIssueTag =
+  | "missing_context"
+  | "too_vague"
+  | "no_format_specified"
+  | "length_unspecified"
+  | "ambiguous_audience"
+  | "multi_question";
+
+export type CritiqueScores = {
+  correctness?: number;
+  completeness?: number;
+  clarity?: number;
+  hallucination_risk?: number;
+};
+
+export type CritiqueResult = {
+  question: string;
+  answer_model: string;
+  critic_model: string;
+
+  answer: string;
+  context: string[];
+  sources?: SourceChunk[];
+
+  answer_critique_markdown: string;
+  prompt_feedback_markdown: string;
+  improved_prompt: string;
+  prompt_issue_tags?: PromptIssueTag[];
+
+  scores?: CritiqueScores;
+};

@@ -114,3 +114,37 @@ class CrossDocRelations(BaseModel):
 class CrossDocRelationsRequest(BaseModel):
     # optional model override, same idea as AskRequest
     model: Optional[str] = None
+
+# Prompt coaching / critique
+
+
+class CritiqueScores(BaseModel):
+    correctness: Optional[float] = None
+    completeness: Optional[float] = None
+    clarity: Optional[float] = None
+    hallucination_risk: Optional[float] = None
+
+
+class CritiqueRequest(BaseModel):
+    question: str
+    answer_model: str
+    critic_model: Optional[str] = None
+    top_k: int = 5
+    doc_name: Optional[str] = None
+
+
+class CritiqueResponse(BaseModel):
+    question: str
+    answer_model: str
+    critic_model: str
+
+    answer: str
+    context: List[str]
+    sources: List[SourceChunk]
+
+    answer_critique_markdown: str
+    prompt_feedback_markdown: str
+    improved_prompt: str
+    prompt_issue_tags: List[str] = []
+
+    scores: Optional[CritiqueScores] = None
