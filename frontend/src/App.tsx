@@ -1042,7 +1042,7 @@ function App() {
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
                            focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 rows={2}
-                placeholder="Ask something you want to improve, e.g. &quot;Explain GDPR&quot;..."
+                placeholder="Ask something to critique the answer and prompt..."
                 value={critiqueQuestion}
                 onChange={(e) => setCritiqueQuestion(e.target.value)}
               />
