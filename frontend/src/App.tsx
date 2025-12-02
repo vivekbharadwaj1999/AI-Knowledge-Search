@@ -19,7 +19,6 @@ import {
   type CritiqueRound,
   fetchCritiqueLogRows,
   resetCritiqueLog,
-  type CritiqueLogRow,
 } from "./api";
 
 
@@ -262,7 +261,7 @@ function RoundScoreGraph({ rounds }: { rounds: CritiqueRound[] }) {
 
       <div className="flex flex-col gap-1 text-[11px] text-slate-200">
         <div className="flex flex-wrap gap-2">
-          {rounds.map((r, idx) => (
+          {rounds.map((r) => (
             <div
               key={r.round}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/70 border border-slate-700"
