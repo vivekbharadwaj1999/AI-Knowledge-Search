@@ -139,9 +139,33 @@ export async function runCritique(params: {
   critic_model?: string;
   top_k?: number;
   doc_name?: string;
+  self_correct?: boolean;
+  similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
 }): Promise<CritiqueResult> {
   const res = await axios.post(`${API_BASE}/critique`, params);
   return res.data as CritiqueResult;
+}
+
+export type CritiqueLogRow = {
+  timestamp?: string;
+  question?: string;
+  answer_model: string;
+  critic_model: string;
+  doc_name?: string | null;
+  self_correct: boolean;
+  similarity?: string | null;
+  num_rounds: number;
+  r1_correctness?: number | null;
+  rN_correctness?: number | null;
+  r1_hallucination?: number | null;
+  rN_hallucination?: number | null;
+  delta_correctness?: number | null;
+  delta_hallucination?: number | null;
+};
+
+export async function fetchCritiqueLogRows(): Promise<CritiqueLogRow[]> {
+  const res = await axios.get(`${API_BASE}/critique-log-rows`);
+  return (res.data.rows || []) as CritiqueLogRow[];
 }
 
 export type PromptIssueTag =
@@ -153,10 +177,24 @@ export type PromptIssueTag =
   | "multi_question";
 
 export type CritiqueScores = {
-  correctness?: number;
-  completeness?: number;
-  clarity?: number;
-  hallucination_risk?: number;
+  correctness?: number | null;
+  completeness?: number | null;
+  clarity?: number | null;
+  hallucination_risk?: number | null;
+  prompt_quality?: number | null;
+};
+
+export type CritiqueRound = {
+  round: number;
+  question: string;
+  answer: string;
+  context: string[];
+  sources?: SourceChunk[];
+  answer_critique_markdown: string;
+  prompt_feedback_markdown: string;
+  improved_prompt: string;
+  prompt_issue_tags: string[];
+  scores?: CritiqueScores | null;
 };
 
 export type CritiqueResult = {
@@ -170,5 +208,16 @@ export type CritiqueResult = {
   prompt_feedback_markdown: string;
   improved_prompt: string;
   prompt_issue_tags?: PromptIssueTag[];
-  scores?: CritiqueScores;
+  scores?: CritiqueScores | null;
+  rounds: CritiqueRound[];
 };
+
+export async function resetCritiqueLog(): Promise<void> {
+  const res = await fetch(`${API_BASE}/reset-critique-log`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to reset critique log");
+  }
+}
+

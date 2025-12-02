@@ -3,6 +3,7 @@ import os
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 from app.config import LLMClient, GROQ_MODEL
 from app.qa import answer_question
@@ -15,6 +16,35 @@ PROMPT_ISSUE_TAGS = [
     "ambiguous_audience",
     "multi_question",
 ]
+
+QUALITY_STOP_THRESHOLD = 0.95
+MAX_HALLUCINATION_FOR_EARLY_STOP = 0.05
+
+CRITIQUE_LOG_PATH = Path(
+    os.getenv("CRITIQUE_LOG_PATH", "data/critique_log.jsonl")
+)
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _safe_tags(parsed: Dict[str, Any]) -> List[str]:
+    raw = parsed.get("prompt_issue_tags") or parsed.get("issue_tags") or []
+    if not isinstance(raw, list):
+        return []
+    out: List[str] = []
+    for t in raw:
+        if isinstance(t, str) and t in PROMPT_ISSUE_TAGS:
+            out.append(t)
+    return out
 
 
 def _build_critique_prompt(
@@ -77,14 +107,6 @@ Rules:
 """
 
 
-def _safe_list_str(value: Any) -> List[str]:
-    if isinstance(value, list):
-        return [str(v) for v in value if isinstance(v, (str, int, float))]
-    if isinstance(value, str):
-        return [value]
-    return []
-
-
 def _safe_json_parse(raw: str) -> Dict[str, Any] | None:
     raw = (raw or "").strip()
     if not raw:
@@ -138,70 +160,119 @@ def _safe_scores(data: Dict[str, Any]) -> Dict[str, Optional[float]]:
     }
 
 
+def reset_critique_log_file() -> None:
+    """
+    Delete the critique log file (if it exists).
+    Used by the /reset-critique-log endpoint.
+    """
+    if CRITIQUE_LOG_PATH.exists():
+        CRITIQUE_LOG_PATH.unlink()
+
+
 def run_critique(
     question: str,
     answer_model: str,
     critic_model: Optional[str] = None,
     top_k: int = 5,
     doc_name: Optional[str] = None,
+    self_correct: bool = False,
+    similarity: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     1) Use the QA pipeline with `answer_model` to answer the question.
     2) Use `critic_model` (or default GROQ_MODEL) to critique the answer + prompt.
-    3) Return a dict ready for CritiqueResponse.
+    3) If self_correct=True, run up to two critique-&-repair rounds.
     """
-
-    answer, context, sources = answer_question(
-        question,
-        k=top_k,
-        doc_name=doc_name,
-        model=answer_model,
-    )
 
     llm = LLMClient()
     critic = critic_model or GROQ_MODEL
-    prompt = _build_critique_prompt(question, answer, context)
-    raw = llm.complete(prompt, model=critic)
 
-    parsed = _safe_json_parse(raw)
+    max_rounds = 2 if self_correct else 1
 
-    if not parsed:
-        print("Failed to parse critique JSON from model:", critic)
-        print("Raw critique output:")
-        print(raw)
+    rounds: List[Dict[str, Any]] = []
 
-        parsed = {
-            "answer_critique_markdown": str(raw),
-            "prompt_feedback_markdown": (
-                "The critic returned non-JSON output; "
-                "treat the text above as the answer critique."
-            ),
-            "improved_prompt": question,
-            "prompt_issue_tags": [],
-            "scores": {},
+    current_question = question
+    final_answer = ""
+    final_context: List[str] = []
+    final_sources: List[Dict[str, Any]] = []
+    final_answer_critique = ""
+    final_prompt_feedback = ""
+    final_improved_prompt = ""
+    final_tags: List[str] = []
+    final_scores: Dict[str, Optional[float]] | None = None
+
+    for round_idx in range(1, max_rounds + 1):
+        answer, context, sources = answer_question(
+            current_question,
+            k=top_k,
+            doc_name=doc_name,
+            model=answer_model,
+            similarity=similarity,
+        )
+
+        prompt = _build_critique_prompt(current_question, answer, context)
+        raw = llm.complete(prompt, model=critic)
+
+        parsed = _safe_json_parse(raw) or {}
+        answer_critique = _safe_str(parsed.get(
+            "answer_critique_markdown") or parsed.get("answer_feedback_markdown"))
+        prompt_feedback = _safe_str(parsed.get("prompt_feedback_markdown"))
+        improved_prompt = _safe_str(parsed.get("improved_prompt"))
+        tags = _safe_tags(parsed)
+        scores = _safe_scores(parsed)
+
+        round_entry = {
+            "round": round_idx,
+            "question": current_question,
+            "answer": answer,
+            "context": context,
+            "sources": sources,
+            "answer_critique_markdown": answer_critique,
+            "prompt_feedback_markdown": prompt_feedback,
+            "improved_prompt": improved_prompt,
+            "prompt_issue_tags": tags,
+            "scores": scores,
         }
+        rounds.append(round_entry)
 
-    answer_critique = str(parsed.get("answer_critique_markdown", "") or "")
-    prompt_feedback = str(parsed.get("prompt_feedback_markdown", "") or "")
-    improved_prompt = str(parsed.get("improved_prompt", "") or question)
-    tags = _safe_list_str(parsed.get("prompt_issue_tags", []))
-    scores = _safe_scores(parsed)
+        final_answer = answer
+        final_context = context
+        final_sources = sources
+        final_answer_critique = answer_critique
+        final_prompt_feedback = prompt_feedback
+        final_improved_prompt = improved_prompt
+        final_tags = tags
+        final_scores = scores
 
-    os.makedirs("data", exist_ok=True)
-    log_entry = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "question": question,
-        "answer_model": answer_model,
-        "critic_model": critic,
-        "answer": answer,
-        "context": context,
-        "prompt_feedback_markdown": prompt_feedback,
-        "answer_critique_markdown": answer_critique,
-        "improved_prompt": improved_prompt,
-        "prompt_issue_tags": tags,
-        "scores": scores,
-    }
+        if round_idx == max_rounds:
+            break
+
+        if not improved_prompt:
+            break
+
+        correctness = scores.get("correctness") if scores else None
+        hallucination = scores.get("hallucination_risk") if scores else None
+
+        if (
+            correctness is not None
+            and correctness >= QUALITY_STOP_THRESHOLD
+            and (hallucination is None or hallucination <= MAX_HALLUCINATION_FOR_EARLY_STOP)
+        ):
+            break
+        current_question = improved_prompt
+
     try:
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "question": question,
+            "answer_model": answer_model,
+            "critic_model": critic,
+            "doc_name": doc_name,
+            "self_correct": self_correct,
+            "similarity": similarity,
+            "rounds": rounds,
+        }
+        os.makedirs("data", exist_ok=True)
         with open("data/critique_log.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
     except Exception as e:
@@ -211,12 +282,13 @@ def run_critique(
         "question": question,
         "answer_model": answer_model,
         "critic_model": critic,
-        "answer": answer,
-        "context": context,
-        "sources": sources,
-        "answer_critique_markdown": answer_critique,
-        "prompt_feedback_markdown": prompt_feedback,
-        "improved_prompt": improved_prompt,
-        "prompt_issue_tags": tags,
-        "scores": scores,
+        "answer": final_answer,
+        "context": final_context,
+        "sources": final_sources,
+        "answer_critique_markdown": final_answer_critique,
+        "prompt_feedback_markdown": final_prompt_feedback,
+        "improved_prompt": final_improved_prompt,
+        "prompt_issue_tags": final_tags,
+        "scores": final_scores,
+        "rounds": rounds,
     }

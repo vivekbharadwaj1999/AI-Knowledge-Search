@@ -69,10 +69,40 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (na * nb)
 
 
+def _dot(a: List[float], b: List[float]) -> float:
+    if len(a) != len(b):
+        return 0.0
+    return float(sum(x * y for x, y in zip(a, b)))
+
+
+def _neg_l2(a: List[float], b: List[float]) -> float:
+    if len(a) != len(b):
+        return -1e9
+    return -math.sqrt(sum((x - y) * (x - y) for x, y in zip(a, b)))
+
+
+def _neg_l1(a: List[float], b: List[float]) -> float:
+    if len(a) != len(b):
+        return -1e9
+    return -sum(abs(x - y) for x, y in zip(a, b))
+
+
+def _keyword_overlap_score(query_text: str, text: str) -> float:
+    q_tokens = {t for t in query_text.lower().split() if t}
+    d_tokens = {t for t in text.lower().split() if t}
+    if not q_tokens or not d_tokens:
+        return 0.0
+    inter = len(q_tokens & d_tokens)
+    union = len(q_tokens | d_tokens)
+    return inter / union
+
+
 def similarity_search(
     query_embedding: List[float],
     k: int = 5,
     doc_name: Optional[str] = None,
+    similarity: str = "cosine",
+    query_text: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Return top-k records most similar to the query.
@@ -101,7 +131,21 @@ def similarity_search(
         if not isinstance(emb, list):
             continue
 
-        score = _cosine_similarity(query_embedding, emb)
+        text = rec.get("text") or ""
+
+        if similarity == "dot":
+            score = _dot(query_embedding, emb)
+        elif similarity == "neg_l2":
+            score = _neg_l2(query_embedding, emb)
+        elif similarity == "neg_l1":
+            score = _neg_l1(query_embedding, emb)
+        elif similarity == "hybrid" and query_text:
+            base = _cosine_similarity(query_embedding, emb)
+            kw = _keyword_overlap_score(query_text, text)
+            score = 0.7 * base + 0.3 * kw
+        else:
+            score = _cosine_similarity(query_embedding, emb)
+
         enriched = dict(rec)
         enriched["score"] = float(score)
         results.append(enriched)
