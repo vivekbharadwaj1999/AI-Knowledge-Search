@@ -24,11 +24,18 @@ def answer_question(
     k: int = 7,
     doc_name: Optional[str] = None,
     model: Optional[str] = None,
+    similarity: Optional[str] = None,
 ):
     embed_client = EmbeddingClient()
     query_embedding = embed_client.embed_query(question)
 
-    records = similarity_search(query_embedding, k=k, doc_name=doc_name)
+    records = similarity_search(
+        query_embedding,
+        k=k,
+        doc_name=doc_name,
+        similarity=similarity or "cosine",
+        query_text=question,
+    )
 
     context_for_llm: List[str] = []
     sources: List[dict] = []

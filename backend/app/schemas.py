@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 
@@ -114,6 +114,20 @@ class CritiqueScores(BaseModel):
     completeness: Optional[float] = None
     clarity: Optional[float] = None
     hallucination_risk: Optional[float] = None
+    prompt_quality: Optional[float] = None
+
+
+class CritiqueRound(BaseModel):
+    round: int
+    question: str
+    answer: str
+    context: List[str]
+    sources: Optional[List[Dict[str, Any]]] = None
+    answer_critique_markdown: str
+    prompt_feedback_markdown: str
+    improved_prompt: str
+    prompt_issue_tags: List[str] = []
+    scores: Optional[CritiqueScores] = None
 
 
 class CritiqueRequest(BaseModel):
@@ -122,20 +136,42 @@ class CritiqueRequest(BaseModel):
     critic_model: Optional[str] = None
     top_k: int = 5
     doc_name: Optional[str] = None
+    self_correct: bool = False
+    similarity: Optional[str] = "cosine"
 
 
 class CritiqueResponse(BaseModel):
     question: str
     answer_model: str
     critic_model: str
-
     answer: str
     context: List[str]
-    sources: List[SourceChunk]
-
+    sources: Optional[List[Dict[str, Any]]] = None
     answer_critique_markdown: str
     prompt_feedback_markdown: str
     improved_prompt: str
     prompt_issue_tags: List[str] = []
-
     scores: Optional[CritiqueScores] = None
+    rounds: List[CritiqueRound] = []
+
+
+class CritiqueLogRow(BaseModel):
+    timestamp: Optional[str] = None
+    question: Optional[str] = None
+    answer_model: str
+    critic_model: str
+    doc_name: Optional[str] = None
+    self_correct: bool
+    similarity: Optional[str] = None
+    num_rounds: int
+
+    r1_correctness: Optional[float] = None
+    r1_hallucination: Optional[float] = None
+    rN_correctness: Optional[float] = None
+    rN_hallucination: Optional[float] = None
+    delta_correctness: Optional[float] = None
+    delta_hallucination: Optional[float] = None
+
+
+class CritiqueLogResponse(BaseModel):
+    rows: List[CritiqueLogRow]

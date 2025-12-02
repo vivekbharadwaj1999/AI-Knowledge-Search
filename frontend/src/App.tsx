@@ -16,7 +16,12 @@ import {
   type CritiqueResult,
   type PromptIssueTag,
   type CritiqueScores,
+  type CritiqueRound,
+  fetchCritiqueLogRows,
+  resetCritiqueLog,
+  type CritiqueLogRow,
 } from "./api";
+
 
 import type {
   DocumentReport,
@@ -104,7 +109,7 @@ const SCORE_LABELS: Record<ScoreKey, string> = {
   hallucination_risk: "Hallucination",
 };
 
-function ScorePills({ scores }: { scores?: CritiqueScores }) {
+function ScorePills({ scores }: { scores?: CritiqueScores | null }) {
   if (!scores) return null;
 
   const entries: [ScoreKey, number][] = Object.entries(
@@ -142,6 +147,151 @@ function ScorePills({ scores }: { scores?: CritiqueScores }) {
           {SCORE_LABELS[key]}: {Math.round(value * 100)}%
         </span>
       ))}
+    </div>
+  );
+}
+
+function computeAnswerSimilarity(a: string, b: string): number {
+  const tokenize = (s: string) =>
+    new Set(
+      s
+        .toLowerCase()
+        .split(/[^a-z0-9]+/i)
+        .filter((t) => t.length > 2)
+    );
+
+  const setA = tokenize(a);
+  const setB = tokenize(b);
+  if (setA.size === 0 && setB.size === 0) return 1;
+  if (setA.size === 0 || setB.size === 0) return 0;
+
+  let intersection = 0;
+  for (const token of setA) {
+    if (setB.has(token)) intersection++;
+  }
+  const union = setA.size + setB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function summarizeDrift(rounds: CritiqueRound[]) {
+  if (!rounds || rounds.length < 2) return null;
+
+  const first = rounds[0];
+  const last = rounds[rounds.length - 1];
+
+  const sim = computeAnswerSimilarity(first.answer, last.answer); // 0–1
+  let label: string;
+  if (sim >= 0.8) label = "Low drift (very similar answers)";
+  else if (sim >= 0.5) label = "Moderate drift (refined or rephrased)";
+  else label = "High drift (substantially changed answer)";
+
+  return {
+    similarity: sim,
+    label,
+  };
+}
+
+function summarizeMultiRoundVerdict(rounds: CritiqueRound[]) {
+  if (!rounds || rounds.length < 2) return null;
+
+  const first = rounds[0].scores || {};
+  const last = rounds[rounds.length - 1].scores || {};
+
+  const c1 = first.correctness ?? null;
+  const c2 = last.correctness ?? null;
+  const h1 = first.hallucination_risk ?? null;
+  const h2 = last.hallucination_risk ?? null;
+
+  if (c1 === null || c2 === null) {
+    return {
+      verdict: "Not enough score data to compare rounds.",
+      deltaCorrectness: 0,
+      deltaHallucination: 0,
+    };
+  }
+
+  const dc = c2 - c1;
+  const dh = (h2 ?? 0) - (h1 ?? 0);
+
+  let verdict: string;
+  if (dc > 0.1 && dh <= 0.05) {
+    verdict = "Second round improved correctness without significantly increasing hallucination risk.";
+  } else if (dc < -0.1 && dh >= 0) {
+    verdict = "Second round reduced correctness; consider disabling self-correct or adjusting the prompt.";
+  } else if (Math.abs(dc) <= 0.1 && Math.abs(dh) <= 0.05) {
+    verdict = "Multi-round loop did not significantly change answer quality.";
+  } else if (dc > 0.1 && dh > 0.05) {
+    verdict = "Second round improved correctness but also increased hallucination risk.";
+  } else {
+    verdict = "Mixed impact: small changes in correctness and/or hallucination risk.";
+  }
+
+  return {
+    verdict,
+    deltaCorrectness: dc,
+    deltaHallucination: dh,
+  };
+}
+
+function RoundScoreGraph({ rounds }: { rounds: CritiqueRound[] }) {
+  if (!rounds || rounds.length === 0) return null;
+
+  const scores = rounds
+    .map((r) => r.scores?.correctness)
+    .filter((v): v is number => typeof v === "number");
+
+  if (scores.length === 0) return null;
+
+  const first = scores[0];
+  const last = scores[scores.length - 1];
+  const delta = last - first;
+
+  const formatPct = (v: number | null | undefined) =>
+    typeof v === "number" ? `${Math.round(v * 100)}%` : "–";
+
+  const deltaLabel =
+    typeof delta === "number" && !Number.isNaN(delta)
+      ? `${delta > 0 ? "+" : ""}${Math.round(delta * 100)}%`
+      : null;
+
+  return (
+    <div className="mt-2">
+      <div className="text-[10px] text-slate-400 mb-1">
+        Correctness across rounds
+      </div>
+
+      <div className="flex flex-col gap-1 text-[11px] text-slate-200">
+        <div className="flex flex-wrap gap-2">
+          {rounds.map((r, idx) => (
+            <div
+              key={r.round}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/70 border border-slate-700"
+            >
+              <span className="text-[10px] text-slate-400">R{r.round}</span>
+              <span className="font-medium">
+                {formatPct(r.scores?.correctness)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {deltaLabel && rounds.length > 1 && (
+          <div className="text-[10px] text-slate-400">
+            Net change from R1 to R{rounds[rounds.length - 1].round}:{" "}
+            <span
+              className={
+                delta > 0
+                  ? "text-emerald-300"
+                  : delta < 0
+                    ? "text-rose-300"
+                    : "text-slate-200"
+              }
+            >
+              {deltaLabel}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -465,6 +615,8 @@ type OutputEntry = OutputEntryBase & {
   id: number;
 };
 
+type SimilarityMetric = "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
+
 function App() {
   const [documents, setDocuments] = useState<string[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | undefined>();
@@ -503,6 +655,23 @@ function App() {
   const [critiques, setCritiques] = useState<CritiqueRun[]>([]);
   const [isCritiqueLoading, setIsCritiqueLoading] = useState(false);
   const [relationsLoading, setRelationsLoading] = useState(false);
+  const [enableSelfCorrect, setEnableSelfCorrect] = useState(false);
+  const [similarityMetric, setSimilarityMetric] = useState<SimilarityMetric>("cosine");
+  const [hasCritiqueLogs, setHasCritiqueLogs] = useState(false);
+
+  useEffect(() => {
+    async function checkExistingLogs() {
+      try {
+        const rows = await fetchCritiqueLogRows();
+        setHasCritiqueLogs(rows.length > 0);
+      } catch (err) {
+        console.error("Failed to check critique logs", err);
+      }
+    }
+
+    checkExistingLogs();
+  }, []);
+
 
   useEffect(() => {
     fetchDocuments()
@@ -577,6 +746,21 @@ function App() {
       alert("Failed to generate AI report. Check console for details.");
     } finally {
       setIsGeneratingReport(false);
+    }
+  };
+
+  const handleResetCritiqueLog = async () => {
+    if (!window.confirm("Are you sure? This will permanently delete all logged critique runs.")) {
+      return;
+    }
+
+    try {
+      await resetCritiqueLog();
+      setHasCritiqueLogs(false);
+      alert("Critique log reset successfully.");
+    } catch (err) {
+      console.error("Failed to reset log", err);
+      alert("Failed to reset log. Check console for details.");
     }
   };
 
@@ -744,6 +928,8 @@ function App() {
         critic_model: criticModelId,
         top_k: topK,
         doc_name: useAllDocs ? undefined : selectedDoc,
+        self_correct: enableSelfCorrect,
+        similarity: similarityMetric,
       });
 
       const nextId =
@@ -752,12 +938,74 @@ function App() {
 
       setCritiques((prev) => [...prev, run]);
       appendOutput({ kind: "critique", critiqueId: nextId });
+      setHasCritiqueLogs(true);
 
     } catch (err) {
       console.error("Critique failed", err);
       alert("Critique failed. Check console for details.");
     } finally {
       setIsCritiqueLoading(false);
+    }
+  };
+
+  const handleExportCritiqueLog = async () => {
+    try {
+      const rows = await fetchCritiqueLogRows();
+      setHasCritiqueLogs(rows.length > 0);
+
+      if (!rows.length) {
+        alert("No critique runs logged yet.");
+        return;
+      }
+
+      const headers = [
+        "timestamp",
+        "question",
+        "answer_model",
+        "critic_model",
+        "doc_name",
+        "self_correct",
+        "similarity",
+        "num_rounds",
+        "r1_correctness",
+        "rN_correctness",
+        "r1_hallucination",
+        "rN_hallucination",
+        "delta_correctness",
+        "delta_hallucination",
+      ] as const;
+
+      type HeaderKey = (typeof headers)[number];
+
+      const headerLine = headers.join(",");
+
+      const lines = rows.map((row) =>
+        headers
+          .map((h: HeaderKey) => {
+            const v = (row as any)[h];
+            if (v === null || v === undefined) return "";
+            const s = String(v);
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          })
+          .join(","),
+      );
+
+      const csv = [headerLine, ...lines].join("\n");
+
+      const blob = new Blob([csv], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "critique_log.csv");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export critique log", err);
+      alert("Failed to export critique log. Check console for details.");
     }
   };
 
@@ -938,7 +1186,7 @@ function App() {
                   <select
                     className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
                     value={modelRight}
-                    onChange={(e) => setModelLeft(e.target.value)}
+                    onChange={(e) => setModelRight(e.target.value)}
                   >
                     <option value="llama-3.1-8b-instant">
                       LLaMA 3.1 8B (fast)
@@ -1077,6 +1325,77 @@ function App() {
                 </button>
               </div>
             </div>
+            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
+              <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
+                Self correcting loop
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                When enabled, the system will run up to two critique & repair
+                rounds: answer → critique → improved prompt → answer again
+                (logged for research).
+              </p>
+
+              <label className="inline-flex items-center gap-2 text-xs text-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEnableSelfCorrect(!enableSelfCorrect)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${enableSelfCorrect ? "bg-sky-500" : "bg-slate-600"
+                    }`}
+                  aria-pressed={enableSelfCorrect}
+                  aria-label="Toggle self-correcting critique loop"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${enableSelfCorrect ? "translate-x-4" : "translate-x-1"
+                      }`}
+                  />
+                </button>
+
+                <span>Enable self correcting critique loop (max 2 rounds)</span>
+              </label>
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
+              <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
+                Similarity function
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Choose how document chunks are ranked for this critique run.
+              </p>
+
+              <select
+                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                value={similarityMetric}
+                onChange={(e) =>
+                  setSimilarityMetric(e.target.value as SimilarityMetric)
+                }
+              >
+                <option value="cosine">Cosine (default)</option>
+                <option value="dot">Dot product</option>
+                <option value="neg_l2">Negative Euclidean distance (L2)</option>
+                <option value="neg_l1">Negative Manhattan distance (L1)</option>
+                <option value="hybrid">Hybrid (Cosine + Jaccard keyword overlap)</option>
+              </select>
+            </div>
+            <div className="mt-4 flex flex-col sm:flex-row justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleExportCritiqueLog}
+                disabled={!hasCritiqueLogs}
+                className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-medium
+             border border-slate-600 text-slate-200 bg-slate-900 hover:bg-slate-800
+             disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Export critique logs (CSV)
+              </button>
+              <button
+                type="button"
+                onClick={handleResetCritiqueLog}
+                className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-medium
+               border border-rose-600 text-rose-200 bg-slate-900 hover:bg-rose-800/40"
+              >
+                Reset critique logs
+              </button>
+            </div>
+
           </div>
         </section>
 
@@ -1421,16 +1740,18 @@ function App() {
                   }
 
                   if (entry.kind === "critique") {
-                    const crt = critiques.find(
-                      (c) => c.id === entry.critiqueId
-                    );
+                    const crt = critiques.find((c) => c.id === entry.critiqueId);
                     if (!crt) return null;
+
+                    const hasTwoRounds = !!(crt.rounds && crt.rounds.length > 1);
+                    const round1 = hasTwoRounds ? crt.rounds[0] : undefined;
 
                     return (
                       <div
                         key={entry.id}
                         className="border border-slate-800 rounded-xl bg-slate-900/40 p-3 sm:p-4 space-y-3"
                       >
+                        {/* Header */}
                         <div className="flex items-center justify-between text-[11px] text-slate-400">
                           <span className="font-semibold text-slate-100">
                             Critique: answer & prompt
@@ -1440,6 +1761,7 @@ function App() {
                           </span>
                         </div>
 
+                        {/* Question */}
                         <div>
                           <div className="text-[11px] text-sky-300">Question</div>
                           <div className="text-xs sm:text-[13px] text-slate-100 leading-relaxed">
@@ -1447,15 +1769,60 @@ function App() {
                           </div>
                         </div>
 
+                        {/* Prompt issue chips (tags) */}
                         {crt.prompt_issue_tags && crt.prompt_issue_tags.length > 0 && (
                           <PromptTipsChips
                             tags={crt.prompt_issue_tags as PromptIssueTag[]}
                           />
                         )}
 
+                        {/* Round 1 block – only if we actually ran a second round */}
+                        {hasTwoRounds && round1 && (
+                          <div className="mt-1 border-t border-slate-800 pt-3 space-y-2">
+                            <div className="text-[11px] uppercase tracking-wide text-slate-400">
+                              Self-correcting loop – Round 1
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="space-y-1">
+                                <div className="text-[11px] font-semibold text-slate-300">
+                                  Round 1 answer
+                                </div>
+                                <div className="rounded-lg bg-slate-950/60 border border-slate-800 p-2 text-xs break-words overflow-auto">
+                                  <MarkdownText text={round1.answer} />
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="text-[11px] font-semibold text-slate-300">
+                                  Round 1 critique
+                                </div>
+                                <div className="rounded-lg bg-slate-950/60 border border-amber-900 p-2 text-xs break-words overflow-auto">
+                                  <MarkdownText
+                                    text={round1.answer_critique_markdown || ""}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Improved prompt that led to Round 2 */}
+                            {round1.improved_prompt && (
+                              <div className="space-y-1 mt-2">
+                                <div className="text-[11px] font-semibold text-emerald-300">
+                                  Improved prompt for Round 2
+                                </div>
+                                <div className="rounded-lg bg-slate-950/60 border border-emerald-900 p-2 text-xs break-words overflow-auto">
+                                  <MarkdownText text={round1.improved_prompt} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Final answer = last round (or only round) */}
                         <div className="space-y-2">
                           <div className="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-800 pb-1">
-                            Answer quality
+                            {hasTwoRounds ? "Answer quality – Round 2 (final)" : "Answer quality"}
                           </div>
 
                           <div className="grid gap-3 md:grid-cols-2">
@@ -1472,7 +1839,7 @@ function App() {
                               <div className="text-[11px] font-semibold text-slate-300">
                                 Answer critique
                               </div>
-                              <ScorePills scores={crt.scores} />
+                              <ScorePills scores={crt.scores || undefined} />
                               <div className="rounded-lg bg-slate-950/60 border border-amber-900 p-2 text-xs break-words overflow-auto">
                                 <MarkdownText text={crt.answer_critique_markdown} />
                               </div>
@@ -1480,6 +1847,7 @@ function App() {
                           </div>
                         </div>
 
+                        {/* Prompt coaching + improved prompt (final) */}
                         <div className="space-y-2 border-t border-slate-800 pt-3">
                           <div className="text-[11px] uppercase tracking-wide text-slate-400">
                             Prompt issues & improved prompt
@@ -1510,12 +1878,53 @@ function App() {
                                 });
                               }}
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-emerald-500/60
-                     text-[11px] text-emerald-100 hover:bg-emerald-500/10"
+                       text-[11px] text-emerald-100 hover:bg-emerald-500/10"
                             >
                               Use this prompt in Ask
                             </button>
                           </div>
                         </div>
+
+                        {/* Research-style summary: multi-round verdict + drift + per-round scores */}
+                        {hasTwoRounds && crt.rounds && (() => {
+                          const verdict = summarizeMultiRoundVerdict(crt.rounds);
+                          const drift = summarizeDrift(crt.rounds);
+
+                          return (
+                            <div className="mt-2 border border-slate-800 rounded-lg bg-slate-950/70 p-3 space-y-2">
+                              <div className="text-[11px] uppercase tracking-wide text-slate-400">
+                                Multi-round verdict
+                              </div>
+
+                              {verdict && (
+                                <div className="text-[11px] text-slate-200 whitespace-pre-wrap">
+                                  {verdict.verdict}
+                                  {typeof verdict.deltaCorrectness === "number" &&
+                                    typeof verdict.deltaHallucination === "number" && (
+                                      <div className="mt-1 text-[10px] text-slate-400">
+                                        Δ correctness:{" "}
+                                        {Math.round(verdict.deltaCorrectness * 100)}% · Δ
+                                        hallucination:{" "}
+                                        {Math.round(verdict.deltaHallucination * 100)}%
+                                      </div>
+                                    )}
+                                </div>
+                              )}
+
+                              {drift && (
+                                <div className="mt-1 text-[11px] text-slate-200">
+                                  <div>{drift.label}</div>
+                                  <div className="text-[10px] text-slate-400">
+                                    Overlap similarity between Round 1 and final answer:{" "}
+                                    {Math.round(drift.similarity * 100)}%
+                                  </div>
+                                </div>
+                              )}
+
+                              <RoundScoreGraph rounds={crt.rounds} />
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   }
