@@ -188,10 +188,11 @@ export default function AskControls(props: AskControlsProps) {
             </div>
           </label>
 
-          <label className="flex items-center gap-1">
+          <label className="flex flex-col items-start gap-1 sm:flex-row sm:items-center">
             <span>Choose model:</span>
             <select
-              className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+              className="w-full sm:w-auto max-w-full bg-slate-800 border border-slate-700 rounded
+                         px-2 py-1 text-[11px] sm:text-xs text-slate-100"
               value={modelId}
               onChange={(e) => setModelId(e.target.value)}
             >
