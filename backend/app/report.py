@@ -1,4 +1,3 @@
-# backend/app/report.py
 import json
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +10,93 @@ from app.schemas import (
     QAItem,
 )
 
+MAX_REPORT_SOURCE_CHARS = 20000
+
+CHUNK_SIZE_CHARS = 4000
+
+SAFE_MAX_PROMPT_CHARS = 6000
+
+
+def _chunk_text_by_chars(text: str, max_chars: int) -> List[str]:
+    """Split text into chunks of at most max_chars, trying to cut at paragraph boundaries."""
+    chunks: List[str] = []
+    start = 0
+    n = len(text)
+
+    while start < n:
+        end = min(start + max_chars, n)
+        cut = text.rfind("\n\n", start, end)
+        if cut == -1:
+            cut = text.rfind(". ", start, end)
+        if cut == -1 or cut <= start:
+            cut = end
+
+        chunk = text[start:cut].strip()
+        if chunk:
+            chunks.append(chunk)
+        start = cut
+
+    return chunks
+
+
+def _summarize_long_document(
+    full_text: str,
+    llm: LLMClient,
+    *,
+    model: Optional[str] = None,
+    chunk_size: int = CHUNK_SIZE_CHARS,
+) -> str:
+    """
+    Use the full document but process it in multiple LLM calls:
+    - Summarize each chunk separately.
+    - Concatenate the partial summaries into a 'meta-document'.
+    """
+    parts = _chunk_text_by_chars(full_text, chunk_size)
+    if len(parts) == 1:
+        return parts[0]
+
+    summaries: List[str] = []
+
+    for idx, part in enumerate(parts, start=1):
+        prompt = f"""
+You are summarizing part {idx} of {len(parts)} of a longer technical document.
+
+PART {idx} CONTENT:
+-------------------
+{part}
+-------------------
+
+Write a concise summary of this part focusing on:
+- main ideas
+- important definitions or equations
+- key arguments or results
+
+Use 2–5 short paragraphs. Do NOT add JSON, backticks, or metadata.
+"""
+        summary = llm.complete(prompt, model=model)
+        summaries.append(f"PART {idx} SUMMARY:\n{summary.strip()}")
+
+    combined = "\n\n".join(summaries)
+    return combined
+
+
+def _truncate_for_prompt(text: str, max_chars: int = SAFE_MAX_PROMPT_CHARS) -> str:
+    """
+    Final safety truncation before sending text to the JSON-report prompt.
+    This helps avoid hitting the provider's token limits even for large docs.
+    """
+    if len(text) <= max_chars:
+        return text
+
+    cut = text.rfind(".", 0, max_chars)
+    if cut == -1:
+        cut = max_chars
+
+    return (
+        text[:cut].strip()
+        + "\n\n[Note: Source text was truncated slightly to fit within model limits.]"
+    )
+
 
 def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
     if not raw:
@@ -19,7 +105,7 @@ def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
     end = raw.rfind("}")
     if start == -1 or end == -1 or end <= start:
         return {}
-    snippet = raw[start: end + 1]
+    snippet = raw[start : end + 1]
     try:
         return json.loads(snippet)
     except json.JSONDecodeError:
@@ -70,97 +156,99 @@ def generate_document_report(
     doc_name: str,
     *,
     model: Optional[str] = None,
-    max_chars: int = 20000,
+    max_chars: int = MAX_REPORT_SOURCE_CHARS,
 ) -> DocumentReport:
-    raw_text = get_document_text(doc_name, max_chars=max_chars)
+    """
+    Generate a rich study report for a document.
+
+    - For smaller documents (len <= max_chars), use the raw text directly.
+    - For larger ones, first summarize in chunks, then build the report from the combined summary.
+    """
+    full_text = get_document_text(doc_name, max_chars=None)
 
     llm = LLMClient()
-    prompt = _build_report_prompt(raw_text)
+
+    if len(full_text) <= max_chars:
+        source_text = full_text
+    else:
+        source_text = _summarize_long_document(
+            full_text,
+            llm,
+            model=model,
+            chunk_size=CHUNK_SIZE_CHARS,
+        )
+
+    source_text = _truncate_for_prompt(source_text)
+
+    prompt = _build_report_prompt(source_text)
     raw = llm.complete(prompt, model=model)
 
     data = _safe_parse_json_object(raw)
 
     def as_list_of_str(value: Any) -> List[str]:
-        if not isinstance(value, list):
-            return []
         out: List[str] = []
-        for item in value:
-            if isinstance(item, (str, int, float)):
-                out.append(str(item))
-            elif isinstance(item, dict):
-                parts = []
-                for k, v in item.items():
-                    parts.append(f"{k}: {v}")
-                if parts:
-                    out.append("; ".join(parts))
-            else:
-                out.append(str(item))
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, (str, int, float)):
+                    out.append(str(item))
+                elif isinstance(item, dict):
+                    parts = []
+                    for k, v in item.items():
+                        parts.append(f"{k}: {v}")
+                    if parts:
+                        out.append("; ".join(parts))
+                else:
+                    out.append(str(item))
         return out
 
     executive_summary = str(data.get("executive_summary", "") or "")
 
-    sections_raw = data.get("sections", [])
+    sections_raw = data.get("sections") or []
     sections: List[ReportSection] = []
     if isinstance(sections_raw, list):
-        for item in sections_raw:
-            if isinstance(item, dict):
-                heading = str(item.get("heading", "")
-                              or "").strip() or "Section"
-                content_val = item.get("content", "") or ""
-                if isinstance(content_val, list):
-                    content = "\n\n".join(str(x) for x in content_val)
-                else:
-                    content = str(content_val)
-                content = content.strip()
-            else:
-                heading = "Section"
-                content = str(item)
-            sections.append(ReportSection(heading=heading, content=content))
+        for sec in sections_raw:
+            if not isinstance(sec, dict):
+                continue
+            heading = str(sec.get("heading", "") or "")
+            content = str(sec.get("content", "") or "")
+            if heading or content:
+                sections.append(ReportSection(heading=heading, content=content))
 
-    key_concepts = as_list_of_str(data.get("key_concepts", []))
-    concept_explanations = as_list_of_str(data.get("concept_explanations", []))
+    key_concepts = as_list_of_str(data.get("key_concepts") or [])
+    concept_explanations = as_list_of_str(data.get("concept_explanations") or [])
+    relationships = as_list_of_str(data.get("relationships") or [])
 
-    relationships = as_list_of_str(data.get("relationships", []))
-
-    kg_raw = data.get("knowledge_graph", [])
+    kg_raw = data.get("knowledge_graph") or []
     knowledge_graph: List[KnowledgeGraphEdge] = []
     if isinstance(kg_raw, list):
         for edge in kg_raw:
             if not isinstance(edge, dict):
                 continue
-            source = str(edge.get("source", "") or "").strip()
-            relation = str(edge.get("relation", "") or "").strip()
-            target = str(edge.get("target", "") or "").strip()
-            if not source or not target:
-                continue
-            knowledge_graph.append(
-                KnowledgeGraphEdge(
-                    source=source, relation=relation, target=target)
-            )
+            src = str(edge.get("source", "") or "")
+            rel = str(edge.get("relation", "") or "")
+            tgt = str(edge.get("target", "") or "")
+            if src and rel and tgt:
+                knowledge_graph.append(
+                    KnowledgeGraphEdge(source=src, relation=rel, target=tgt)
+                )
 
-    pq_raw = data.get("practice_questions", [])
+    qa_raw = data.get("practice_questions") or []
     practice_questions: List[QAItem] = []
-    if isinstance(pq_raw, list):
-        for qa in pq_raw:
+    if isinstance(qa_raw, list):
+        for qa in qa_raw:
             if not isinstance(qa, dict):
                 continue
-            q = str(qa.get("question", "") or "").strip()
-            a = str(qa.get("answer", "") or "").strip()
-            if not q:
-                continue
-            practice_questions.append(QAItem(question=q, answer=a))
+            question = str(qa.get("question", "") or "")
+            answer = str(qa.get("answer", "") or "")
+            if question or answer:
+                practice_questions.append(QAItem(question=question, answer=answer))
 
-    difficulty_level = (
-        str(data.get("difficulty_level", "") or "").strip() or "intermediate"
-    )
-    difficulty_explanation = str(
-        data.get("difficulty_explanation", "") or ""
-    ).strip()
+    difficulty_level = str(data.get("difficulty_level", "") or "")
+    difficulty_explanation = str(data.get("difficulty_explanation", "") or "")
 
-    study_path = as_list_of_str(data.get("study_path", []))
-
-    explain_like_im_5 = str(data.get("explain_like_im_5", "") or "").strip()
-    cheat_sheet = as_list_of_str(data.get("cheat_sheet", []))
+    study_path = as_list_of_str(data.get("study_path") or [])
+    explain_like_im_5 = str(data.get("explain_like_im_5", "") or "")
+    cheat_sheet = as_list_of_str(data.get("cheat_sheet") or [])
 
     return DocumentReport(
         doc_name=doc_name,
