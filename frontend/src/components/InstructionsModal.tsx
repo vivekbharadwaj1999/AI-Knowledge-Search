@@ -22,7 +22,6 @@ const steps: Step[] = [
     description:
       "VivBot lets you upload documents, run grounded Q&A, compare LLMs, generate AI reports and insights, and run advanced critique pipelines with configurable similarity metrics for research.",
   },
-
   {
     id: "upload",
     navLabel: "Document upload & index",
@@ -35,7 +34,6 @@ const steps: Step[] = [
       "Once indexed, the document appears in the dropdown used by the later sections.",
     ],
   },
-
   {
     id: "scope",
     navLabel: "Search scope",
@@ -49,7 +47,6 @@ const steps: Step[] = [
       "“Remove all documents” clears the current index so you can start over.",
     ],
   },
-
   {
     id: "ask",
     navLabel: "Ask (Q&A)",
@@ -69,7 +66,6 @@ const steps: Step[] = [
       "**Off**: hides all highlighting if you just want to read the context.",
     ],
   },
-
   {
     id: "insights",
     navLabel: "Auto Insights",
@@ -84,7 +80,6 @@ const steps: Step[] = [
       "Builds a compact 'Mindmap style' text representation that connects different topics of the content.",
     ],
   },
-
   {
     id: "compare",
     navLabel: "Compare models",
@@ -98,7 +93,6 @@ const steps: Step[] = [
       "The Output panel shows a side by side card with both answers and their sources.",
     ],
   },
-
   {
     id: "critique",
     navLabel: "Critique",
@@ -114,7 +108,6 @@ const steps: Step[] = [
       "The output also shows the differences in the accuracy of the answer from both rounds.",
     ],
   },
-
   {
     id: "similarity",
     navLabel: "Similarity functions",
@@ -125,14 +118,13 @@ const steps: Step[] = [
       "You can pick the similarity function used to rank context chunks in the critique pipeline.",
       "Available metrics include:",
       "**Cosine similarity**: standard choice for normalised embeddings.",
-      "**Negative L1 distance**: −‖x − y‖₁, emphasises sparse differences.",
-      "**Negative L2 distance**: −‖x − y‖₂, punishes large deviations strongly.",
+      "**Negative Manhattan distance (L1)**: −‖x − y‖₁, emphasises sparse differences.",
+      "**Negative Euclidean distance (L2)**: −‖x − y‖₂, punishes large deviations strongly.",
       "**Dot product**: raw dot product between embedding vectors.",
       "**Hybrid (Cosine + Jaccard)**: combines cosine similarity with Jaccard overlap over token sets.",
       "Changing the metric can affect which chunks are selected, how critique is grounded, and how highlight rankings behave.",
     ],
   },
-
   {
     id: "output",
     navLabel: "Output panel",
@@ -176,9 +168,11 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-5xl max-h-[80vh] rounded-2xl bg-zinc-900 p-6 shadow-xl border border-zinc-700 flex flex-col">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-2 sm:px-4">
+      {/* FIXED-HEIGHT CARD */}
+      <div className="w-full max-w-5xl h-[90vh] sm:h-[80vh] rounded-2xl bg-zinc-900 p-4 sm:p-6 shadow-xl border border-zinc-700 flex flex-col">
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-zinc-50">INSTRUCTIONS</h2>
           <button
             onClick={handleClose}
@@ -188,8 +182,37 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
           </button>
         </div>
 
-        <div className="flex-1 flex gap-6 overflow-hidden">
-          <aside className="w-56 border-r border-zinc-800 pr-4 overflow-y-auto">
+        {/* Body: fills remaining height */}
+        <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden">
+          {/* MOBILE: horizontal scroll tabs */}
+          <div className="md:hidden">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              Sections
+            </p>
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+              {steps.map((s, idx) => {
+                const active = idx === currentIndex;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap border transition
+                      ${
+                        active
+                          ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/60"
+                          : "border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                      }`}
+                  >
+                    {s.navLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* DESKTOP: left vertical sidebar */}
+          <aside className="hidden md:block w-56 border-r border-zinc-800 pr-4 overflow-y-auto">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
               Sections
             </p>
@@ -214,7 +237,9 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
             </div>
           </aside>
 
+          {/* Main content column */}
           <main className="flex-1 flex flex-col min-h-0">
+            {/* Scrollable text area */}
             <div className="flex-1 overflow-y-auto pr-1">
               <h3 className="text-xl font-semibold text-zinc-50">
                 {step.title}
@@ -238,6 +263,7 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
               )}
             </div>
 
+            {/* Fixed footer inside the column */}
             <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
               <div className="text-xs text-zinc-500">
                 Step {currentIndex + 1} of {steps.length}
