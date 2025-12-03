@@ -32,22 +32,46 @@ export type Comparison = {
   };
 };
 
-const MODEL_OPTIONS = [
-  { id: "llama-3.1-8b-instant", label: "LLaMA 3.1 8B (fast)" },
-  { id: "llama-3.3-70b-versatile", label: "LLaMA 3.3 70B (quality)" },
-  { id: "openai/gpt-oss-20b", label: "GPT-OSS 20B (OpenAI OSS)" },
-  { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B (OpenAI OSS, large)" },
+export const MODEL_OPTIONS = [
+  {
+    id: "llama-3.1-8b-instant",
+    label: "Llama 3.1 8B Instant (fast, lightweight)",
+  },
+  {
+    id: "llama-3.3-70b-versatile",
+    label: "Llama 3.3 70B Versatile (high quality general model)",
+  },
+  {
+    id: "meta-llama/llama-4-scout-17b-16e-instruct",
+    label: "Llama 4 Scout 17B 16E (efficient, balanced)",
+  },
   {
     id: "meta-llama/llama-4-maverick-17b-128e-instruct",
-    label: "LLaMA 4 Maverick 17B (preview)",
+    label: "Llama 4 Maverick 17B 128E (strong reasoning)",
+  },
+  {
+    id: "openai/gpt-oss-20b",
+    label: "GPT OSS 20B (reliable all round model)",
+  },
+  {
+    id: "openai/gpt-oss-120b",
+    label: "GPT OSS 120B (high capacity model)",
+  },
+  {
+    id: "meta-llama/llama-guard-4-12b",
+    label: "Llama Guard 4 12B (safety check model against disallowed content)",
+  },
+  {
+    id: "openai/gpt-oss-safeguard-20b",
+    label: "GPT OSS Safeguard 20B (safety check model against disallowed content)",
+  },
+  {
+    id: "moonshotai/kimi-k2-instruct-0905",
+    label: "Kimi K2 Instruct 0905 (large context)",
   },
   {
     id: "qwen/qwen3-32b",
-    label: "Qwen3 32B (multilingual)",
-  },
-  {
-    id: "groq/compound",
-    label: "Groq Compound (system)",
+    label: "Qwen3 32B (multilingual & strong general model)",
   },
 ] as const;
 

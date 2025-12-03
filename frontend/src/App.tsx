@@ -1,6 +1,6 @@
 import { useEffect, useRef, useLayoutEffect, useState, type KeyboardEvent } from "react";
 import UploadPanel from "./components/UploadPanel";
-import AskControls from "./components/AskPanel";
+import AskControls, { MODEL_OPTIONS } from "./components/AskPanel";
 import ReportPanel from "./components/ReportPanel";
 import ReactMarkdown from "react-markdown";
 import logo from "./assets/logo.webp";
@@ -61,7 +61,6 @@ function PromptTipsChips({ tags }: { tags: PromptIssueTag[] }) {
           className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full
                      bg-amber-500/10 border border-amber-500/40 text-amber-200"
         >
-          <span>⚠️</span>
           <span>{PROMPT_TIP_LABELS[tag] ?? tag}</span>
         </span>
       ))}
@@ -1154,27 +1153,11 @@ function App() {
                     value={modelLeft}
                     onChange={(e) => setModelLeft(e.target.value)}
                   >
-                    <option value="llama-3.1-8b-instant">
-                      LLaMA 3.1 8B (fast)
-                    </option>
-                    <option value="llama-3.3-70b-versatile">
-                      LLaMA 3.3 70B (quality)
-                    </option>
-                    <option value="openai/gpt-oss-20b">
-                      GPT-OSS 20B (OpenAI OSS)
-                    </option>
-                    <option value="openai/gpt-oss-120b">
-                      GPT-OSS 120B (OpenAI OSS, large)
-                    </option>
-                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
-                      LLaMA 4 Maverick 17B (preview)
-                    </option>
-                    <option value="qwen/qwen3-32b">
-                      Qwen3 32B (multilingual)
-                    </option>
-                    <option value="groq/compound">
-                      Groq Compound (system)
-                    </option>
+                    {MODEL_OPTIONS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1187,27 +1170,11 @@ function App() {
                     value={modelRight}
                     onChange={(e) => setModelRight(e.target.value)}
                   >
-                    <option value="llama-3.1-8b-instant">
-                      LLaMA 3.1 8B (fast)
-                    </option>
-                    <option value="llama-3.3-70b-versatile">
-                      LLaMA 3.3 70B (quality)
-                    </option>
-                    <option value="openai/gpt-oss-20b">
-                      GPT-OSS 20B (OpenAI OSS)
-                    </option>
-                    <option value="openai/gpt-oss-120b">
-                      GPT-OSS 120B (OpenAI OSS, large)
-                    </option>
-                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
-                      LLaMA 4 Maverick 17B (preview)
-                    </option>
-                    <option value="qwen/qwen3-32b">
-                      Qwen3 32B (multilingual)
-                    </option>
-                    <option value="groq/compound">
-                      Groq Compound (system)
-                    </option>
+                    {MODEL_OPTIONS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1252,27 +1219,11 @@ function App() {
                     value={answerModelId}
                     onChange={(e) => setAnswerModelId(e.target.value)}
                   >
-                    <option value="llama-3.1-8b-instant">
-                      LLaMA 3.1 8B (fast)
-                    </option>
-                    <option value="llama-3.3-70b-versatile">
-                      LLaMA 3.3 70B (quality)
-                    </option>
-                    <option value="openai/gpt-oss-20b">
-                      GPT-OSS 20B (OpenAI OSS)
-                    </option>
-                    <option value="openai/gpt-oss-120b">
-                      GPT-OSS 120B (OpenAI OSS, large)
-                    </option>
-                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
-                      LLaMA 4 Maverick 17B (preview)
-                    </option>
-                    <option value="qwen/qwen3-32b">
-                      Qwen3 32B (multilingual)
-                    </option>
-                    <option value="groq/compound">
-                      Groq Compound (system)
-                    </option>
+                    {MODEL_OPTIONS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1285,30 +1236,11 @@ function App() {
                     value={criticModelId}
                     onChange={(e) => setCriticModelId(e.target.value)}
                   >
-                    <option value="llama-3.1-8b-instant">
-                      LLaMA 3.1 8B (fast)
-                    </option>
-                    <option value="llama-3.3-70b-versatile">
-                      LLaMA 3.3 70B (quality)
-                    </option>
-                    <option value="openai/gpt-oss-20b">
-                      GPT-OSS 20B (OpenAI OSS)
-                    </option>
-                    <option value="openai/gpt-oss-120b">
-                      GPT-OSS 120B (OpenAI OSS, large)
-                    </option>
-                    <option value="meta-llama/llama-4-maverick-17b-128e-instruct">
-                      LLaMA 4 Maverick 17B (preview)
-                    </option>
-                    <option value="qwen/qwen3-32b">
-                      Qwen3 32B (multilingual)
-                    </option>
-                    <option value="groq/compound">
-                      Groq Compound (system)
-                    </option>
-                    <option value="meta-llama/llama-guard-4-12b">
-                      LLaMA Guard 4 12B (safety classifier against disallowed content)
-                    </option>
+                    {MODEL_OPTIONS.map((m) => (
+                      <option className="pr-4" key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1750,7 +1682,6 @@ function App() {
                         key={entry.id}
                         className="border border-slate-800 rounded-xl bg-slate-900/40 p-3 sm:p-4 space-y-3"
                       >
-                        {/* Header */}
                         <div className="flex items-center justify-between text-[11px] text-slate-400">
                           <span className="font-semibold text-slate-100">
                             Critique: answer & prompt
@@ -1760,7 +1691,6 @@ function App() {
                           </span>
                         </div>
 
-                        {/* Question */}
                         <div>
                           <div className="text-[11px] text-sky-300">Question</div>
                           <div className="text-xs sm:text-[13px] text-slate-100 leading-relaxed">
@@ -1768,14 +1698,12 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Prompt issue chips (tags) */}
                         {crt.prompt_issue_tags && crt.prompt_issue_tags.length > 0 && (
                           <PromptTipsChips
                             tags={crt.prompt_issue_tags as PromptIssueTag[]}
                           />
                         )}
 
-                        {/* Round 1 block – only if we actually ran a second round */}
                         {hasTwoRounds && round1 && (
                           <div className="mt-1 border-t border-slate-800 pt-3 space-y-2">
                             <div className="text-[11px] uppercase tracking-wide text-slate-400">
@@ -1804,7 +1732,6 @@ function App() {
                               </div>
                             </div>
 
-                            {/* Improved prompt that led to Round 2 */}
                             {round1.improved_prompt && (
                               <div className="space-y-1 mt-2">
                                 <div className="text-[11px] font-semibold text-emerald-300">
@@ -1818,7 +1745,6 @@ function App() {
                           </div>
                         )}
 
-                        {/* Final answer = last round (or only round) */}
                         <div className="space-y-2">
                           <div className="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-800 pb-1">
                             {hasTwoRounds ? "Answer quality – Round 2 (final)" : "Answer quality"}
@@ -1846,7 +1772,6 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Prompt coaching + improved prompt (final) */}
                         <div className="space-y-2 border-t border-slate-800 pt-3">
                           <div className="text-[11px] uppercase tracking-wide text-slate-400">
                             Prompt issues & improved prompt
@@ -1884,7 +1809,6 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Research-style summary: multi-round verdict + drift + per-round scores */}
                         {hasTwoRounds && crt.rounds && (() => {
                           const verdict = summarizeMultiRoundVerdict(crt.rounds);
                           const drift = summarizeDrift(crt.rounds);
