@@ -4,6 +4,7 @@ import AskControls, { MODEL_OPTIONS } from "./components/AskPanel";
 import ReportPanel from "./components/ReportPanel";
 import ReactMarkdown from "react-markdown";
 import logo from "./assets/logo.webp";
+import InstructionsModal from "./components/InstructionsModal";
 
 import {
   fetchDocuments,
@@ -656,6 +657,7 @@ function App() {
   const [enableSelfCorrect, setEnableSelfCorrect] = useState(false);
   const [similarityMetric, setSimilarityMetric] = useState<SimilarityMetric>("cosine");
   const [hasCritiqueLogs, setHasCritiqueLogs] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
 
   useEffect(() => {
     async function checkExistingLogs() {
@@ -1031,20 +1033,29 @@ function App() {
 
   return (
     <div className="flex flex-col bg-slate-950 text-slate-100 min-h-screen overflow-hidden">
-      <header className="shrink-0 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center gap-3">
-        <img
-          src={logo}
-          alt="VivBot logo"
-          className="h-9 w-9 sm:h-10 sm:w-10 object-contain rounded-xl"
-        />
-        <div className="flex flex-col">
-          <h1 className="text-lg sm:text-xl font-semibold">
-            VivBot – AI Knowledge Search
-          </h1>
-          <p className="text-[11px] sm:text-xs text-slate-400">
-            Designed and developed by Vivek
-          </p>
+      <header className="shrink-0 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <img
+            src={logo}
+            alt="VivBot logo"
+            className="h-10 w-10 sm:h-10 sm:w-10 object-contain rounded-xl"
+          />
+          <div className="flex flex-col ml-3">
+            <h1 className="text-lg sm:text-xl font-semibold">
+              VivBot - An AI Document Knowledge Search
+            </h1>
+            <p className="text-[11px] sm:text-xs text-slate-400">
+              Designed and developed by Vivek
+            </p>
+          </div>
         </div>
+
+        <button
+          onClick={() => setShowInstructions(true)}
+          className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-100 hover:bg-slate-800"
+        >
+          Instructions
+        </button>
       </header>
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -1927,6 +1938,10 @@ function App() {
           </div>
         </section>
       </main>
+      <InstructionsModal
+        open={showInstructions}
+        onClose={() => setShowInstructions(false)}
+      />
     </div>
   );
 }

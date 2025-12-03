@@ -1,0 +1,269 @@
+import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+
+type Step = {
+  id: string;
+  navLabel: string;
+  title: string;
+  description: string;
+  points?: string[];
+};
+
+type InstructionsModalProps = {
+  open: boolean;
+  onClose: () => void;
+};
+
+const steps: Step[] = [
+  {
+    id: "overview",
+    navLabel: "Overview",
+    title: "Welcome to VivBot - An AI Document Knowledge Search",
+    description:
+      "VivBot lets you upload documents, run grounded Q&A, compare LLMs, generate AI reports and insights, and run advanced critique pipelines with configurable similarity metrics for research.",
+  },
+
+  {
+    id: "upload",
+    navLabel: "Document upload & index",
+    title: "1. Upload & index a document",
+    description:
+      "Start by uploading a document in section 1: “Upload & index a document”. Supported formats include PDF, TXT, CSV, DOCX, XLSX, and PPTX.",
+    points: [
+      "Click “Choose File” and pick a document from your computer.",
+      "Press “Upload & Index” to chunk the file and create vector embeddings.",
+      "Once indexed, the document appears in the dropdown used by the later sections.",
+    ],
+  },
+
+  {
+    id: "scope",
+    navLabel: "Search scope",
+    title: "2. Documents & search scope",
+    description:
+      "Use section 2 to decide which documents are used when answering questions or generating reports.",
+    points: [
+      "Choose “All documents” to search across everything, or select a single document from the dropdown.",
+      "“Generate AI Report” creates a structured explanation of the selected document.",
+      "“Relations between these documents” explores how multiple documents are related in the vector space.",
+      "“Remove all documents” clears the current index so you can start over.",
+    ],
+  },
+
+  {
+    id: "ask",
+    navLabel: "Ask (Q&A)",
+    title: "3. Ask questions (grounded Q&A)",
+    description:
+      "Section 3 answers questions using only the selected document(s) or all documents as context.",
+    points: [
+      "Check the “Answering for document …” text to see which document is active.",
+      "Set “Top K” to control how many chunks are retrieved from the vector store.",
+      "Pick a default model (for example LLaMA 3.1 8B Instant).",
+      "Type a question about the selected document and press “Ask”.",
+      "The answer appears on the right, together with the retrieved context.",
+      "Use the **Highlight Context** after using Auto Insights on each answer card to inspect context:",
+      "**AI**: highlights the exact spans the model seems to rely on most.",
+      "**Keywords**: highlights chunks that best match your query terms.",
+      "**Sentences**: highlights the most similar sentences in each chunk.",
+      "**Off**: hides all highlighting if you just want to read the context.",
+    ],
+  },
+
+  {
+    id: "insights",
+    navLabel: "Auto Insights",
+    title: "4. Auto Insights",
+    description:
+      "Auto Insights provides a higher level layer of reasoning on top of Q&A and your uploaded documents. It transforms raw answers and source chunks into structured insights.",
+    points: [
+      "Creates a concise summary that captures the key ideas from the retrieved context.",
+      "Extracts important entities such as people, organisations, technologies, frameworks, and locations.",
+      "Identifies relevant keywords to give a quick sense of the document's focus areas.",
+      "Generates 'Suggested Questions', that help you explore deeper or prepare for interviews/presentations.",
+      "Builds a compact 'Mindmap style' text representation that connects different topics of the content.",
+    ],
+  },
+
+  {
+    id: "compare",
+    navLabel: "Compare models",
+    title: "5. Compare models",
+    description:
+      "Section 4 lets you compare how two different LLMs answer the same question.",
+    points: [
+      "Enter a question in the “Compare models” box.",
+      "Choose Model A and Model B from the dropdowns.",
+      "VivBot uses the same retrieved context for both models, so the comparison is fair.",
+      "The Output panel shows a side by side card with both answers and their sources.",
+    ],
+  },
+
+  {
+    id: "critique",
+    navLabel: "Critique",
+    title: "6. Critique answer & prompt",
+    description:
+      "Section 5 analyses both the prompt and the model answer, and can run a double critique loop.",
+    points: [
+      "Ask a question you want to analyse more deeply in the “Critique answer & prompt” section.",
+      "VivBot checks for prompt problems such as: missing context, vagueness, multi questions, or unclear audience.",
+      "The answer itself is critiqued for grounding, reasoning quality, structure, and possible hallucinations.",
+      "You can enable a **double critique loop**, where one model first critiques the answer, and this loop is run once more to refine the answer.",
+      "This pipeline helps you iteratively improve both the prompt and the answer quality.",
+      "The output also shows the differences in the accuracy of the answer from both rounds.",
+    ],
+  },
+
+  {
+    id: "similarity",
+    navLabel: "Similarity functions",
+    title: "7. Similarity functions (Cosine, distance, and hybrid)",
+    description:
+      "For advanced experiments, VivBot lets you choose how similarity between embeddings is measured.",
+    points: [
+      "You can pick the similarity function used to rank context chunks in the critique pipeline.",
+      "Available metrics include:",
+      "**Cosine similarity**: standard choice for normalised embeddings.",
+      "**Negative L1 distance**: −‖x − y‖₁, emphasises sparse differences.",
+      "**Negative L2 distance**: −‖x − y‖₂, punishes large deviations strongly.",
+      "**Dot product**: raw dot product between embedding vectors.",
+      "**Hybrid (Cosine + Jaccard)**: combines cosine similarity with Jaccard overlap over token sets.",
+      "Changing the metric can affect which chunks are selected, how critique is grounded, and how highlight rankings behave.",
+    ],
+  },
+
+  {
+    id: "output",
+    navLabel: "Output panel",
+    title: "8. Output panel on the right",
+    description:
+      "All results show up as separate cards on the right side of the screen.",
+    points: [
+      "Ask, Compare, AI Reports, Auto Insights, and Critique each create their own card.",
+      "You can scroll back through previous results at any time.",
+    ],
+  },
+];
+
+export default function InstructionsModal({ open, onClose }: InstructionsModalProps) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (open) {
+      setCurrentIndex(0);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const step = steps[currentIndex];
+  const isFirst = currentIndex === 0;
+  const isLast = currentIndex === steps.length - 1;
+
+  const handleClose = () => {
+    setCurrentIndex(0);
+    onClose();
+  };
+
+  const handleNext = () => {
+    if (!isLast) setCurrentIndex((i) => i + 1);
+    else handleClose();
+  };
+
+  const handlePrev = () => {
+    if (!isFirst) setCurrentIndex((i) => i - 1);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-5xl max-h-[80vh] rounded-2xl bg-zinc-900 p-6 shadow-xl border border-zinc-700 flex flex-col">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-zinc-50">INSTRUCTIONS</h2>
+          <button
+            onClick={handleClose}
+            className="rounded-full px-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 flex gap-6 overflow-hidden">
+          <aside className="w-56 border-r border-zinc-800 pr-4 overflow-y-auto">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              Sections
+            </p>
+            <div className="mt-3 flex flex-col gap-1">
+              {steps.map((s, idx) => {
+                const active = idx === currentIndex;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`w-full rounded-lg px-3 py-1.5 text-left text-sm transition ${
+                      active
+                        ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
+                        : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                    }`}
+                  >
+                    {s.navLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <main className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto pr-1">
+              <h3 className="text-xl font-semibold text-zinc-50">
+                {step.title}
+              </h3>
+              <p className="mt-2 text-sm text-zinc-300">{step.description}</p>
+
+              {step.points && (
+                <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-zinc-200">
+                  {step.points.map((p, idx) => (
+                    <li key={idx}>
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <span>{children}</span>,
+                        }}
+                      >
+                        {p}
+                      </ReactMarkdown>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
+              <div className="text-xs text-zinc-500">
+                Step {currentIndex + 1} of {steps.length}
+              </div>
+              <div className="flex items-center gap-2">
+                {!isFirst && (
+                  <button
+                    type="button"
+                    onClick={handlePrev}
+                    className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-800"
+                  >
+                    Back
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  className="rounded-lg bg-emerald-500 px-4 py-1.5 text-sm font-medium text-zinc-900 hover:bg-emerald-400"
+                >
+                  {isLast ? "Finish" : "Next"}
+                </button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}

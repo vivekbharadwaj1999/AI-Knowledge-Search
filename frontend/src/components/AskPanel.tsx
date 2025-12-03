@@ -1,4 +1,8 @@
-import type { KeyboardEvent, RefObject } from "react";
+import type {
+  KeyboardEvent,
+  RefObject,
+  ChangeEvent,
+} from "react";
 import type { AutoInsights, SourceChunk } from "../api";
 
 export type HighlightMode = "ai" | "keywords" | "sentences" | "off";
@@ -98,20 +102,47 @@ export type AskControlsProps = {
   askInputRef?: RefObject<HTMLTextAreaElement | null>;
 };
 
-export default function AskControls({
-  selectedDoc,
-  question,
-  setQuestion,
-  topK,
-  setTopK,
-  modelId,
-  setModelId,
-  canAsk,
-  isLoading,
-  onAsk,
-  onQuestionKeyDown,
-  askInputRef,
-}: AskControlsProps) {
+export default function AskControls(props: AskControlsProps) {
+  const {
+    selectedDoc,
+    question,
+    setQuestion,
+    topK,
+    setTopK,
+    modelId,
+    setModelId,
+    canAsk,
+    isLoading,
+    onAsk,
+    onQuestionKeyDown,
+    askInputRef,
+  } = props;
+
+  const decreaseTopK = () => {
+    const next = Math.max(1, topK - 1);
+    setTopK(next);
+  };
+
+  const increaseTopK = () => {
+    const next = Math.min(20, topK + 1);
+    setTopK(next);
+  };
+
+  const handleTopKChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.trim();
+
+    if (raw === "") {
+      setTopK(1);
+      return;
+    }
+
+    const parsed = parseInt(raw, 10);
+    if (Number.isNaN(parsed)) return;
+
+    const clamped = Math.min(20, Math.max(1, parsed));
+    setTopK(clamped);
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="text-xs text-slate-400 space-y-1">
@@ -122,20 +153,43 @@ export default function AskControls({
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-1">
+          <label className="flex items-center gap-2">
             <span>Top&nbsp;K:</span>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={topK}
-              onChange={(e) => setTopK(Number(e.target.value) || 5)}
-              className="w-14 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-xs text-slate-100"
-            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={decreaseTopK}
+                className="flex h-7 w-7 items-center justify-center rounded-full
+                           border border-slate-600 bg-slate-900
+                           text-xs text-slate-100 hover:bg-slate-800"
+              >
+                <span className="text-xl pb-1">–</span>
+              </button>
+
+              <input
+                type="text"
+                inputMode="numeric"
+                value={topK}
+                onChange={handleTopKChange}
+                className="w-12 rounded-md border border-slate-700 bg-slate-800
+                           px-2 py-1 text-xs text-slate-100 text-center
+                           focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+
+              <button
+                type="button"
+                onClick={increaseTopK}
+                className="flex h-7 w-7 items-center justify-center rounded-full
+                           border border-slate-600 bg-slate-900
+                           text-xs text-slate-100 hover:bg-slate-800"
+              >
+                <span className="text-xl pb-1">+</span>
+              </button>
+            </div>
           </label>
 
           <label className="flex items-center gap-1">
-            <span>Default model:</span>
+            <span>Choose model:</span>
             <select
               className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
               value={modelId}
@@ -153,25 +207,27 @@ export default function AskControls({
 
       <div className="space-y-2">
         <h3 className="font-semibold text-sm sm:text-base">Ask questions</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2">
           <textarea
             ref={askInputRef}
-            className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
-                       focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-violet-500"
             rows={2}
             placeholder="Ask something about the selected document..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={onQuestionKeyDown}
           />
-          <button
-            onClick={onAsk}
-            disabled={!canAsk}
-            className="h-[40px] self-end inline-flex items-center justify-center rounded-lg px-4 text-sm font-medium
-                       bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? "Thinking..." : "Ask"}
-          </button>
+          <div className="flex justify-end">
+            <button
+              onClick={onAsk}
+              disabled={!canAsk}
+              className="h-[40px] inline-flex items-center justify-center rounded-lg px-4 text-sm font-medium
+                         bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? "Thinking..." : "Ask"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
