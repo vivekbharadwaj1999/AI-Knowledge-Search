@@ -1,6 +1,5 @@
 import json
 from typing import Any, Dict, List, Optional
-
 from app.config import LLMClient
 from app.vector_store import get_document_text
 from app.schemas import (
@@ -10,15 +9,14 @@ from app.schemas import (
     QAItem,
 )
 
-MAX_REPORT_SOURCE_CHARS = 20000
+MAX_REPORT_SOURCE_CHARS = 40000 
 
-CHUNK_SIZE_CHARS = 4000
+CHUNK_SIZE_CHARS = 10000
 
-SAFE_MAX_PROMPT_CHARS = 6000
+SAFE_MAX_PROMPT_CHARS = 20000
 
 
 def _chunk_text_by_chars(text: str, max_chars: int) -> List[str]:
-    """Split text into chunks of at most max_chars, trying to cut at paragraph boundaries."""
     chunks: List[str] = []
     start = 0
     n = len(text)
@@ -73,7 +71,7 @@ Write a concise summary of this part focusing on:
 
 Use 2–5 short paragraphs. Do NOT add JSON, backticks, or metadata.
 """
-        summary = llm.complete(prompt, model=model)
+        summary = llm.complete(prompt, model=model, max_tokens=800)
         summaries.append(f"PART {idx} SUMMARY:\n{summary.strip()}")
 
     combined = "\n\n".join(summaries)
@@ -81,10 +79,6 @@ Use 2–5 short paragraphs. Do NOT add JSON, backticks, or metadata.
 
 
 def _truncate_for_prompt(text: str, max_chars: int = SAFE_MAX_PROMPT_CHARS) -> str:
-    """
-    Final safety truncation before sending text to the JSON-report prompt.
-    This helps avoid hitting the provider's token limits even for large docs.
-    """
     if len(text) <= max_chars:
         return text
 
@@ -181,7 +175,7 @@ def generate_document_report(
     source_text = _truncate_for_prompt(source_text)
 
     prompt = _build_report_prompt(source_text)
-    raw = llm.complete(prompt, model=model)
+    raw = llm.complete(prompt, model=model, max_tokens=2048)
 
     data = _safe_parse_json_object(raw)
 
@@ -192,9 +186,7 @@ def generate_document_report(
                 if isinstance(item, (str, int, float)):
                     out.append(str(item))
                 elif isinstance(item, dict):
-                    parts = []
-                    for k, v in item.items():
-                        parts.append(f"{k}: {v}")
+                    parts = [f"{k}: {v}" for k, v in item.items()]
                     if parts:
                         out.append("; ".join(parts))
                 else:
