@@ -1,11 +1,54 @@
-# env files
+###############################################
+# ENV FILES
+###############################################
 .env
 */.env
 
-# typical extras
-node_modules/
+###############################################
+# PYTHON BUILD / CACHE
+###############################################
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.pkl
+
+###############################################
+# NODE / REACT
+###############################################
+node_modules/
 dist/
 build/
+*.log
+
+###############################################
+# BACKEND DATA (should never be tracked)
+###############################################
 backend/data/critique_log.jsonl
+backend/data/*.jsonl
+backend/uploads/
+backend/vector_store/
+backend/tmp/
+backend/.cache/
+
+###############################################
+# FRONTEND BUILD ASSETS
+###############################################
+frontend/dist/
+frontend/build/
+frontend/node_modules/
+
+###############################################
+# EDITOR / OS FILES
+###############################################
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+###############################################
+# VENV
+###############################################
+.venv/
+venv/
+env/
