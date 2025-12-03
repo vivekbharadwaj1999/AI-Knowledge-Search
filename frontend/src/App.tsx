@@ -1237,7 +1237,7 @@ function App() {
                     onChange={(e) => setCriticModelId(e.target.value)}
                   >
                     {MODEL_OPTIONS.map((m) => (
-                      <option className="pr-4" key={m.id} value={m.id}>
+                      <option key={m.id} value={m.id}>
                         {m.label}
                       </option>
                     ))}

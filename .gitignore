@@ -26,6 +26,7 @@ build/
 ###############################################
 backend/data/critique_log.jsonl
 backend/data/*.jsonl
+backend/data/*
 backend/uploads/
 backend/vector_store/
 backend/tmp/
