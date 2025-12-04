@@ -1089,7 +1089,7 @@ function App() {
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden pb-20 lg:pb-0">
         <section
           ref={leftColumnRef}
           className={`w-full lg:w-1/2 border-b-0 lg:border-r border-slate-800 flex flex-col ${mobileView === "output" ? "hidden lg:flex" : ""
@@ -2046,29 +2046,32 @@ function App() {
           </div>
         </section>
       </main>
-      <div className="lg:hidden fixed bottom-5 left-0 right-0 px-4">
+      <div className="lg:hidden fixed bottom-5 left-0 right-0 px-4 pointer-events-none">
         <div className="flex justify-between">
           {mobileView === "output" ? (
             <button
               type="button"
               onClick={() => setMobileView("operations")}
               className="inline-flex items-center justify-center rounded-full px-3 py-3 text-xs font-medium
-                         bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 border border-emerald-400
-                         active:scale-95 transition-transform">
+                   bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 border border-emerald-400
+                   active:scale-95 transition-transform pointer-events-auto"
+            >
               <span className="mr-1">◀</span>
               <span>OPERATIONS</span>
             </button>
           ) : (
             <span />
           )}
+
           {mobileView === "operations" && (
             <button
               type="button"
               onClick={() => setMobileView("output")}
               className="inline-flex items-center justify-center rounded-full px-3 py-3 text-xs font-medium
-                         bg-sky-500 text-white shadow-lg shadow-sky-500/40 border border-sky-400
-                         active:scale-95 transition-transform">
-              <span>OUTPUT</span>
+                   bg-sky-500 text-white shadow-lg shadow-sky-500/40 border border-sky-400
+                   active:scale-95 transition-transform pointer-events-auto"
+            >
+              <span>OUTPUTS</span>
               <span className="ml-1">▶</span>
             </button>
           )}
