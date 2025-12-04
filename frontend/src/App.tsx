@@ -616,6 +616,14 @@ type OutputEntry = OutputEntryBase & {
 
 type SimilarityMetric = "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
 
+const SIMILARITY_LABELS: Record<SimilarityMetric, string> = {
+  cosine: "cosine similarity",
+  dot: "dot product similarity",
+  neg_l2: "negative Euclidean distance (L2)",
+  neg_l1: "negative Manhattan distance (L1)",
+  hybrid: "hybrid (cosine + Jaccard) similarity",
+};
+
 function App() {
   const [documents, setDocuments] = useState<string[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | undefined>();
@@ -772,7 +780,13 @@ function App() {
     const trimmed = question.trim();
 
     try {
-      const res = await askQuestion(trimmed, topK, selectedDoc, modelId);
+      const res = await askQuestion(
+        trimmed,
+        topK,
+        selectedDoc,
+        modelId,
+        similarityMetric
+      );
 
       const nextId = messages.length
         ? messages[messages.length - 1].id + 1
@@ -874,8 +888,8 @@ function App() {
 
     try {
       const [leftRes, rightRes] = await Promise.all([
-        askQuestion(trimmed, topK, selectedDoc, modelLeft),
-        askQuestion(trimmed, topK, selectedDoc, modelRight),
+        askQuestion(trimmed, topK, selectedDoc, modelLeft, similarityMetric),
+        askQuestion(trimmed, topK, selectedDoc, modelRight, similarityMetric),
       ]);
 
       const nextId = comparisons.length
@@ -1009,6 +1023,21 @@ function App() {
     }
   };
 
+  const decreaseTopK = () => setTopK((k) => Math.max(1, k - 1));
+  const increaseTopK = () => setTopK((k) => Math.min(20, k + 1));
+
+  const handleTopKChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.trim();
+    if (raw === "") {
+      setTopK(1);
+      return;
+    }
+    const parsed = parseInt(raw, 10);
+    if (!Number.isNaN(parsed)) {
+      setTopK(Math.min(20, Math.max(1, parsed)));
+    }
+  };
+
   const handleAnalyzeRelations = async () => {
     if (!useAllDocs) {
       alert("Turn on 'All documents' to analyze relations between them.");
@@ -1021,7 +1050,7 @@ function App() {
 
     try {
       setRelationsLoading(true);
-      const data = await fetchDocumentRelations({});
+      const data = await fetchDocumentRelations({ similarity: similarityMetric });
       appendOutput({ kind: "relations", relations: data });
     } catch (err) {
       console.error("Failed to analyze relations", err);
@@ -1082,7 +1111,75 @@ function App() {
               setUseAllDocs={setUseAllDocs}
             />
 
-            <div className="flex flex-wrap gap-2 mt-3">
+            <div className="mt-4 pb-2 pt-4 flex flex-col sm:flex-row gap-4 items-start">
+              <div className="space-y-2 flex-1">
+                <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
+                  Similarity function
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Choose how document chunks are ranked for all operations below
+                  (Relations between documents, Ask, Compare, Critique).
+                </p>
+
+                <select
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                  value={similarityMetric}
+                  onChange={(e) =>
+                    setSimilarityMetric(e.target.value as SimilarityMetric)
+                  }
+                >
+                  <option value="cosine">Cosine (default)</option>
+                  <option value="dot">Dot product</option>
+                  <option value="neg_l2">Negative Euclidean distance (L2)</option>
+                  <option value="neg_l1">Negative Manhattan distance (L1)</option>
+                  <option value="hybrid">Hybrid (Cosine + Jaccard keyword overlap)</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
+                  Retrieval Top K
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Used for Ask, Compare, and Critique.
+                </p>
+                <label className="flex items-center gap-2 text-xs text-slate-300 pt-4">
+                  <span>Top&nbsp;K:</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={decreaseTopK}
+                      className="flex h-7 w-7 items-center justify-center rounded-full
+                     border border-slate-600 bg-slate-900
+                     text-xs text-slate-100 hover:bg-slate-800"
+                    >
+                      <span className="text-xl pb-1">–</span>
+                    </button>
+
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={topK}
+                      onChange={handleTopKChange}
+                      className="w-12 rounded-md border border-slate-700 bg-slate-800
+                     px-2 py-1 text-xs text-slate-100 text-center
+                     focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={increaseTopK}
+                      className="flex h-7 w-7 items-center justify-center rounded-full
+                     border border-slate-600 bg-slate-900
+                     text-xs text-slate-100 hover:bg-slate-800"
+                    >
+                      <span className="text-xl pb-1">+</span>
+                    </button>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
               <button
                 onClick={handleGenerateReport}
                 disabled={!selectedDoc || useAllDocs || isGeneratingReport}
@@ -1120,7 +1217,6 @@ function App() {
               question={question}
               setQuestion={setQuestion}
               topK={topK}
-              setTopK={setTopK}
               modelId={modelId}
               setModelId={setModelId}
               canAsk={canAsk}
@@ -1136,6 +1232,8 @@ function App() {
               canCompare={false}
               isCompareLoading={false}
               askInputRef={askInputRef}
+              similarityMetric={similarityMetric}
+
             />
           </div>
 
@@ -1143,8 +1241,24 @@ function App() {
             <h2 className="text-sm sm:text-base font-semibold mb-3">
               4. Compare models
             </h2>
-
+            <div className="mb-4 text-xs text-slate-400">
+              <span className="font-semibold">
+                {selectedDoc
+                  ? `Answering for document: ${selectedDoc}`
+                  : "Searching across all indexed documents"}
+              </span>
+              {", using "}
+              <span className="font-semibold">Top K = {topK}</span>
+              {", and "}
+              <span className="font-semibold">
+                {SIMILARITY_LABELS[similarityMetric]} function
+              </span>
+              {" (configured in section 2)."}
+            </div>
             <div className="space-y-2">
+              <label className="block text-[11px] text-slate-400 mb-0.5">
+                Ask Question
+              </label>
               <textarea
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
                  focus:outline-none focus:ring-2 focus:ring-violet-500"
@@ -1206,7 +1320,20 @@ function App() {
             <h2 className="text-sm sm:text-base font-semibold mb-2">
               5. Critique answer & prompt
             </h2>
-
+            <div className="mb-4 text-xs text-slate-400">
+              <span className="font-semibold">
+                {selectedDoc
+                  ? `Answering for document: ${selectedDoc}`
+                  : "Searching across all indexed documents"}
+              </span>
+              {", using "}
+              <span className="font-semibold">Top K = {topK}</span>
+              {", and "}
+              <span className="font-semibold">
+                {SIMILARITY_LABELS[similarityMetric]} function
+              </span>
+              {" (configured in section 2)."}
+            </div>
             <div className="space-y-2">
               <label className="block text-[11px] text-slate-400 mb-0.5">
                 Ask Question
@@ -1295,29 +1422,7 @@ function App() {
                 <span>Enable self correcting critique loop (max 2 rounds)</span>
               </label>
             </div>
-            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
-              <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
-                Similarity function
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Choose how document chunks are ranked for this critique run.
-              </p>
-
-              <select
-                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
-                value={similarityMetric}
-                onChange={(e) =>
-                  setSimilarityMetric(e.target.value as SimilarityMetric)
-                }
-              >
-                <option value="cosine">Cosine (default)</option>
-                <option value="dot">Dot product</option>
-                <option value="neg_l2">Negative Euclidean distance (L2)</option>
-                <option value="neg_l1">Negative Manhattan distance (L1)</option>
-                <option value="hybrid">Hybrid (Cosine + Jaccard keyword overlap)</option>
-              </select>
-            </div>
-            <div className="mt-4 flex flex-col sm:flex-row justify-between gap-2">
+            <div className="mt-4 pt-6 pb-2 flex flex-col sm:flex-row justify-between gap-2 border-t border-slate-800">
               <button
                 type="button"
                 onClick={handleExportCritiqueLog}

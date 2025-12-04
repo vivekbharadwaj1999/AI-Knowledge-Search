@@ -16,6 +16,34 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (na * nb)
 
 
+def _dot(a: List[float], b: List[float]) -> float:
+    if len(a) != len(b):
+        return 0.0
+    return sum(x * y for x, y in zip(a, b))
+
+
+def _neg_l2(a: List[float], b: List[float]) -> float:
+    if len(a) != len(b):
+        return float("-inf")
+    return -sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+
+
+def _neg_l1(a: List[float], b: List[float]) -> float:
+    if len(a) != len(b):
+        return float("-inf")
+    return -sum(abs(x - y) for x, y in zip(a, b))
+
+
+def _keyword_overlap_score(text_a: str, text_b: str) -> float:
+    a_tokens = {t for t in text_a.lower().split() if t}
+    b_tokens = {t for t in text_b.lower().split() if t}
+    if not a_tokens or not b_tokens:
+        return 0.0
+    inter = len(a_tokens & b_tokens)
+    union = len(a_tokens | b_tokens)
+    return inter / union
+
+
 def _safe_json_object(raw: str) -> Dict[str, Any]:
     if not raw:
         return {}
@@ -34,6 +62,7 @@ def analyze_cross_document_relations(
     model: Optional[str] = None,
     max_pairs: int = 12,
     min_similarity: float = 0.2,
+    similarity: str = "cosine",
 ) -> CrossDocRelations:
     """
     Compute pairwise similarities between documents and let the LLM
@@ -50,15 +79,36 @@ def analyze_cross_document_relations(
     for i in range(len(docs)):
         for j in range(i + 1, len(docs)):
             a, b = docs[i], docs[j]
-            sim = _cosine_similarity(doc_embeddings[a], doc_embeddings[b])
+            emb_a = doc_embeddings[a]
+            emb_b = doc_embeddings[b]
+
+            if similarity == "dot":
+                sim = _dot(emb_a, emb_b)
+            elif similarity == "neg_l2":
+                sim = _neg_l2(emb_a, emb_b)
+            elif similarity == "neg_l1":
+                sim = _neg_l1(emb_a, emb_b)
+            elif similarity == "hybrid":
+                base = _cosine_similarity(emb_a, emb_b)
+                preview_a = doc_previews.get(a, "") or ""
+                preview_b = doc_previews.get(b, "") or ""
+                kw = _keyword_overlap_score(preview_a, preview_b)
+                sim = 0.7 * base + 0.3 * kw
+            else:
+                sim = _cosine_similarity(emb_a, emb_b)
+
             pairs.append({"doc_a": a, "doc_b": b, "similarity": float(sim)})
 
     pairs.sort(key=lambda p: p["similarity"], reverse=True)
-    filtered_pairs = [p for p in pairs if p["similarity"] >= min_similarity]
-    if not filtered_pairs:
-        filtered_pairs = pairs[:max_pairs]
+    if similarity in ("cosine", "dot", "hybrid"):
+        filtered_pairs = [
+            p for p in pairs if p["similarity"] >= min_similarity]
+        if not filtered_pairs:
+            filtered_pairs = pairs[:max_pairs]
+        else:
+            filtered_pairs = filtered_pairs[:max_pairs]
     else:
-        filtered_pairs = filtered_pairs[:max_pairs]
+        filtered_pairs = pairs[:max_pairs]
 
     doc_blocks = []
     for name in docs:
@@ -128,7 +178,6 @@ def analyze_cross_document_relations(
         "Output ONLY valid JSON.\n"
     )
 
-
     llm = LLMClient()
     raw = llm.complete(prompt, model=model)
     data = _safe_json_object(raw)
@@ -145,7 +194,7 @@ def analyze_cross_document_relations(
         b = p["doc_b"]
         sim = float(p["similarity"])
         sim_lookup[(a, b)] = sim
-        sim_lookup[(b, a)] = sim 
+        sim_lookup[(b, a)] = sim
 
     relation_models: List[DocPairRelation] = []
     if isinstance(relations_raw, list):
