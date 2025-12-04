@@ -134,6 +134,7 @@ const steps: Step[] = [
     points: [
       "Ask, Compare, AI Reports, Auto Insights, and Critique each create their own card.",
       "You can scroll back through previous results at any time.",
+      "Use the **OUTPUT** and **OPERATIONS** buttons at the bottom on mobile to switch between viewing the output panel and the operations panel.",
     ],
   },
 ];

@@ -666,6 +666,9 @@ function App() {
   const [similarityMetric, setSimilarityMetric] = useState<SimilarityMetric>("cosine");
   const [hasCritiqueLogs, setHasCritiqueLogs] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [mobileView, setMobileView] = useState<"operations" | "output">(
+    "operations"
+  );
 
   useEffect(() => {
     async function checkExistingLogs() {
@@ -1059,18 +1062,17 @@ function App() {
       setRelationsLoading(false);
     }
   };
-
   return (
     <div className="flex flex-col bg-slate-950 text-slate-100 min-h-screen overflow-hidden">
       <header className="shrink-0 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-3">
           <img
             src={logo}
             alt="VivBot logo"
             className="h-10 w-10 sm:h-10 sm:w-10 object-contain rounded-xl"
           />
           <div className="flex flex-col ml-3">
-            <h1 className="text-lg sm:text-xl font-semibold">
+            <h1 className="text-base sm:text-xl font-semibold">
               VivBot - An AI Document Knowledge Search
             </h1>
             <p className="text-[11px] sm:text-xs text-slate-400">
@@ -1090,7 +1092,8 @@ function App() {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         <section
           ref={leftColumnRef}
-          className="w-full lg:w-1/2 border-b-0 lg:border-r border-slate-800 flex flex-col">
+          className={`w-full lg:w-1/2 border-b-0 lg:border-r border-slate-800 flex flex-col ${mobileView === "output" ? "hidden lg:flex" : ""
+            }`}>
           <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-slate-800">
             <h2 className="text-sm sm:text-base font-semibold mb-3">
               1. Upload & index a document
@@ -1447,12 +1450,12 @@ function App() {
         </section>
 
         <section
-          className="w-full lg:w-1/2 flex flex-col"
+          className={`w-full lg:w-1/2 flex flex-col ${mobileView === "operations" ? "hidden lg:flex" : ""
+            }`}
           style={
             rightMaxHeight
               ? { maxHeight: rightMaxHeight, overflowY: "auto" }
-              : undefined
-          }>
+              : undefined}>
           <div className="flex-1 px-4 sm:px-6 py-4">
             <h2 className="text-sm sm:text-base font-semibold mb-3">Output</h2>
 
@@ -2043,6 +2046,34 @@ function App() {
           </div>
         </section>
       </main>
+      <div className="lg:hidden fixed bottom-5 left-0 right-0 px-4">
+        <div className="flex justify-between">
+          {mobileView === "output" ? (
+            <button
+              type="button"
+              onClick={() => setMobileView("operations")}
+              className="inline-flex items-center justify-center rounded-full px-3 py-3 text-xs font-medium
+                         bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 border border-emerald-400
+                         active:scale-95 transition-transform">
+              <span className="mr-1">🡸</span>
+              <span>OPERATIONS</span>
+            </button>
+          ) : (
+            <span />
+          )}
+          {mobileView === "operations" && (
+            <button
+              type="button"
+              onClick={() => setMobileView("output")}
+              className="inline-flex items-center justify-center rounded-full px-3 py-3 text-xs font-medium
+                         bg-sky-500 text-white shadow-lg shadow-sky-500/40 border border-sky-400
+                         active:scale-95 transition-transform">
+              <span>OUTPUT</span>
+              <span className="ml-1">🡺</span>
+            </button>
+          )}
+        </div>
+      </div>
       <InstructionsModal
         open={showInstructions}
         onClose={() => setShowInstructions(false)}
