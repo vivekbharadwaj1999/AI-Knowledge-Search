@@ -772,7 +772,13 @@ function App() {
     const trimmed = question.trim();
 
     try {
-      const res = await askQuestion(trimmed, topK, selectedDoc, modelId);
+      const res = await askQuestion(
+        trimmed,
+        topK,
+        selectedDoc,
+        modelId,
+        similarityMetric
+      );
 
       const nextId = messages.length
         ? messages[messages.length - 1].id + 1
@@ -874,8 +880,8 @@ function App() {
 
     try {
       const [leftRes, rightRes] = await Promise.all([
-        askQuestion(trimmed, topK, selectedDoc, modelLeft),
-        askQuestion(trimmed, topK, selectedDoc, modelRight),
+        askQuestion(trimmed, topK, selectedDoc, modelLeft, similarityMetric),
+        askQuestion(trimmed, topK, selectedDoc, modelRight, similarityMetric),
       ]);
 
       const nextId = comparisons.length
@@ -1021,7 +1027,7 @@ function App() {
 
     try {
       setRelationsLoading(true);
-      const data = await fetchDocumentRelations({});
+      const data = await fetchDocumentRelations({ similarity: similarityMetric });
       appendOutput({ kind: "relations", relations: data });
     } catch (err) {
       console.error("Failed to analyze relations", err);
@@ -1081,7 +1087,28 @@ function App() {
               useAllDocs={useAllDocs}
               setUseAllDocs={setUseAllDocs}
             />
+            <div className="mt-4 pb-4 pt-4 space-y-2">
+              <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
+                Similarity function
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Choose how document chunks are ranked for all operations below (Relations between documents, Ask, Compare, Critique).
+              </p>
 
+              <select
+                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                value={similarityMetric}
+                onChange={(e) =>
+                  setSimilarityMetric(e.target.value as SimilarityMetric)
+                }
+              >
+                <option value="cosine">Cosine (default)</option>
+                <option value="dot">Dot product</option>
+                <option value="neg_l2">Negative Euclidean distance (L2)</option>
+                <option value="neg_l1">Negative Manhattan distance (L1)</option>
+                <option value="hybrid">Hybrid (Cosine + Jaccard keyword overlap)</option>
+              </select>
+            </div>
             <div className="flex flex-wrap gap-2 mt-3">
               <button
                 onClick={handleGenerateReport}
@@ -1143,8 +1170,15 @@ function App() {
             <h2 className="text-sm sm:text-base font-semibold mb-3">
               4. Compare models
             </h2>
-
+            <div className="mb-4 font-bold text-xs text-slate-400 space-y-1">
+              {selectedDoc
+                ? `Answering for document: ${selectedDoc}`
+                : "Searching across all indexed documents."}
+            </div>
             <div className="space-y-2">
+              <label className="block text-[11px] text-slate-400 mb-0.5">
+                Ask Question
+              </label>
               <textarea
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
                  focus:outline-none focus:ring-2 focus:ring-violet-500"
@@ -1206,7 +1240,11 @@ function App() {
             <h2 className="text-sm sm:text-base font-semibold mb-2">
               5. Critique answer & prompt
             </h2>
-
+            <div className="mb-4 font-bold text-xs text-slate-400 space-y-1">
+              {selectedDoc
+                ? `Answering for document: ${selectedDoc}`
+                : "Searching across all indexed documents."}
+            </div>
             <div className="space-y-2">
               <label className="block text-[11px] text-slate-400 mb-0.5">
                 Ask Question
@@ -1295,29 +1333,7 @@ function App() {
                 <span>Enable self correcting critique loop (max 2 rounds)</span>
               </label>
             </div>
-            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
-              <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
-                Similarity function
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Choose how document chunks are ranked for this critique run.
-              </p>
-
-              <select
-                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
-                value={similarityMetric}
-                onChange={(e) =>
-                  setSimilarityMetric(e.target.value as SimilarityMetric)
-                }
-              >
-                <option value="cosine">Cosine (default)</option>
-                <option value="dot">Dot product</option>
-                <option value="neg_l2">Negative Euclidean distance (L2)</option>
-                <option value="neg_l1">Negative Manhattan distance (L1)</option>
-                <option value="hybrid">Hybrid (Cosine + Jaccard keyword overlap)</option>
-              </select>
-            </div>
-            <div className="mt-4 flex flex-col sm:flex-row justify-between gap-2">
+            <div className="mt-4 pt-6 pb-2 flex flex-col sm:flex-row justify-between gap-2 border-t border-slate-800">
               <button
                 type="button"
                 onClick={handleExportCritiqueLog}

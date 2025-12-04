@@ -90,6 +90,7 @@ async def ask_question_route(payload: AskRequest):
         k=payload.top_k,
         doc_name=payload.doc_name,
         model=payload.model,
+        similarity=payload.similarity,
     )
 
     model_used = payload.model or GROQ_MODEL
@@ -141,7 +142,10 @@ def create_report(req: ReportRequest):
 @app.post("/document-relations", response_model=CrossDocRelations)
 async def document_relations_route(payload: CrossDocRelationsRequest):
     try:
-        result = analyze_cross_document_relations(model=payload.model)
+        result = analyze_cross_document_relations(
+            model=payload.model,
+            similarity=payload.similarity,
+        )
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

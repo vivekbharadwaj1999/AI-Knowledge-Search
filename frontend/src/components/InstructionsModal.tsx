@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 
 type Step = {
@@ -48,9 +48,26 @@ const steps: Step[] = [
     ],
   },
   {
+    id: "similarity",
+    navLabel: "Similarity functions",
+    title: "3. Similarity functions (Cosine, distance, and hybrid)",
+    description:
+      "For advanced experiments, VivBot lets you choose how similarity between embeddings is measured.",
+    points: [
+      "You can pick the similarity function used to rank context chunks in all operations below (Relations between documents, Ask, Compare, Critique).",
+      "Available metrics include:",
+      "**Cosine similarity**: standard choice for normalised embeddings.",
+      "**Negative Manhattan distance (L1)**: −‖x − y‖₁, emphasises sparse differences.",
+      "**Negative Euclidean distance (L2)**: −‖x − y‖₂, punishes large deviations strongly.",
+      "**Dot product**: raw dot product between embedding vectors.",
+      "**Hybrid (Cosine + Jaccard)**: combines cosine similarity with Jaccard overlap over token sets.",
+      "Changing the metric can affect which chunks are selected, how similarity is grounded, and how highlight rankings behave.",
+    ],
+  },
+  {
     id: "ask",
     navLabel: "Ask (Q&A)",
-    title: "3. Ask questions (grounded Q&A)",
+    title: "4. Ask questions (grounded Q&A)",
     description:
       "Section 3 answers questions using only the selected document(s) or all documents as context.",
     points: [
@@ -69,7 +86,7 @@ const steps: Step[] = [
   {
     id: "insights",
     navLabel: "Auto Insights",
-    title: "4. Auto Insights",
+    title: "5. Auto Insights",
     description:
       "Auto Insights provides a higher level layer of reasoning on top of Q&A and your uploaded documents. It transforms raw answers and source chunks into structured insights.",
     points: [
@@ -83,7 +100,7 @@ const steps: Step[] = [
   {
     id: "compare",
     navLabel: "Compare models",
-    title: "5. Compare models",
+    title: "6. Compare models",
     description:
       "Section 4 lets you compare how two different LLMs answer the same question.",
     points: [
@@ -96,7 +113,7 @@ const steps: Step[] = [
   {
     id: "critique",
     navLabel: "Critique",
-    title: "6. Critique answer & prompt",
+    title: "7. Critique answer & prompt",
     description:
       "Section 5 analyses both the prompt and the model answer, and can run a double critique loop.",
     points: [
@@ -106,23 +123,6 @@ const steps: Step[] = [
       "You can enable a **double critique loop**, where one model first critiques the answer, and this loop is run once more to refine the answer.",
       "This pipeline helps you iteratively improve both the prompt and the answer quality.",
       "The output also shows the differences in the accuracy of the answer from both rounds.",
-    ],
-  },
-  {
-    id: "similarity",
-    navLabel: "Similarity functions",
-    title: "7. Similarity functions (Cosine, distance, and hybrid)",
-    description:
-      "For advanced experiments, VivBot lets you choose how similarity between embeddings is measured.",
-    points: [
-      "You can pick the similarity function used to rank context chunks in the critique pipeline.",
-      "Available metrics include:",
-      "**Cosine similarity**: standard choice for normalised embeddings.",
-      "**Negative Manhattan distance (L1)**: −‖x − y‖₁, emphasises sparse differences.",
-      "**Negative Euclidean distance (L2)**: −‖x − y‖₂, punishes large deviations strongly.",
-      "**Dot product**: raw dot product between embedding vectors.",
-      "**Hybrid (Cosine + Jaccard)**: combines cosine similarity with Jaccard overlap over token sets.",
-      "Changing the metric can affect which chunks are selected, how critique is grounded, and how highlight rankings behave.",
     ],
   },
   {
@@ -141,11 +141,26 @@ const steps: Step[] = [
 export default function InstructionsModal({ open, onClose }: InstructionsModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  const mobileTabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const mobileTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
   useEffect(() => {
     if (open) {
       setCurrentIndex(0);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const btn = mobileTabRefs.current[currentIndex];
+    if (btn) {
+      btn.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
+    }
+  }, [currentIndex, open]);
 
   if (!open) return null;
 
@@ -169,9 +184,7 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-2 sm:px-4">
-      {/* FIXED-HEIGHT CARD */}
       <div className="w-full max-w-5xl h-[90vh] sm:h-[80vh] rounded-2xl bg-zinc-900 p-4 sm:p-6 shadow-xl border border-zinc-700 flex flex-col">
-        {/* Header */}
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-zinc-50">INSTRUCTIONS</h2>
           <button
@@ -182,14 +195,15 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
           </button>
         </div>
 
-        {/* Body: fills remaining height */}
         <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden">
-          {/* MOBILE: horizontal scroll tabs */}
           <div className="md:hidden">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
               Sections
             </p>
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+            <div
+              className="mt-3 flex gap-2 overflow-x-auto pb-2 -mx-1 px-1"
+              ref={mobileTabsContainerRef}
+            >
               {steps.map((s, idx) => {
                 const active = idx === currentIndex;
                 return (
@@ -197,6 +211,9 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
                     key={s.id}
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
+                    ref={(el) => {
+                      mobileTabRefs.current[idx] = el;
+                    }}
                     className={`shrink-0 rounded-full px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap border transition
                       ${
                         active
@@ -211,7 +228,6 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
             </div>
           </div>
 
-          {/* DESKTOP: left vertical sidebar */}
           <aside className="hidden md:block w-56 border-r border-zinc-800 pr-4 overflow-y-auto">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
               Sections
@@ -237,9 +253,7 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
             </div>
           </aside>
 
-          {/* Main content column */}
           <main className="flex-1 flex flex-col min-h-0">
-            {/* Scrollable text area */}
             <div className="flex-1 overflow-y-auto pr-1">
               <h3 className="text-xl font-semibold text-zinc-50">
                 {step.title}
@@ -263,7 +277,6 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
               )}
             </div>
 
-            {/* Fixed footer inside the column */}
             <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
               <div className="text-xs text-zinc-500">
                 Step {currentIndex + 1} of {steps.length}

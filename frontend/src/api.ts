@@ -52,11 +52,13 @@ export async function askQuestion(
   question: string,
   top_k = 5,
   docName?: string,
-  model?: string
+  model?: string,
+  similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid"
 ): Promise<AskResult> {
   const payload: any = { question, top_k };
   if (docName) payload.doc_name = docName;
   if (model) payload.model = model;
+  if (similarity) payload.similarity = similarity;
 
   const res = await axios.post(`${API_BASE}/ask`, payload);
   return res.data as AskResult;
@@ -128,6 +130,7 @@ export type CrossDocRelations = {
 
 export async function fetchDocumentRelations(params?: {
   model?: string;
+  similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
 }): Promise<CrossDocRelations> {
   const res = await axios.post(`${API_BASE}/document-relations`, params || {});
   return res.data as CrossDocRelations;

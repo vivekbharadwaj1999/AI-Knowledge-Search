@@ -7,6 +7,7 @@ class AskRequest(BaseModel):
     top_k: int = 5
     doc_name: Optional[str] = None
     model: Optional[str] = None
+    similarity: Optional[str] = None
 
 
 class SourceChunk(BaseModel):
@@ -107,6 +108,7 @@ class CrossDocRelations(BaseModel):
 
 class CrossDocRelationsRequest(BaseModel):
     model: Optional[str] = None
+    similarity: Optional[str] = "cosine"
 
 
 class CritiqueScores(BaseModel):

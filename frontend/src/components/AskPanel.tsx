@@ -207,7 +207,9 @@ export default function AskControls(props: AskControlsProps) {
       </div>
 
       <div className="space-y-2">
-        <h3 className="font-semibold text-sm sm:text-base">Ask questions</h3>
+        <label className="block text-[11px] text-slate-400 mb-0.5">
+          Ask Question
+        </label>
         <div className="flex flex-col gap-2">
           <textarea
             ref={askInputRef}
