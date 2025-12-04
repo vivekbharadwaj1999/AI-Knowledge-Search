@@ -1,7 +1,6 @@
 import type {
   KeyboardEvent,
   RefObject,
-  ChangeEvent,
 } from "react";
 import type { AutoInsights, SourceChunk } from "../api";
 
@@ -79,12 +78,21 @@ export const MODEL_OPTIONS = [
   },
 ] as const;
 
+type SimilarityMetric = "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
+
+const SIMILARITY_LABELS: Record<SimilarityMetric, string> = {
+  cosine: "cosine similarity",
+  dot: "dot product similarity",
+  neg_l2: "negative Euclidean distance (L2)",
+  neg_l1: "negative Manhattan distance (L1)",
+  hybrid: "hybrid (cosine + Jaccard) similarity",
+};
+
 export type AskControlsProps = {
   selectedDoc?: string;
   question: string;
   setQuestion: (v: string) => void;
   topK: number;
-  setTopK: (v: number) => void;
   modelId: string;
   setModelId: (id: string) => void;
   canAsk: boolean;
@@ -100,6 +108,7 @@ export type AskControlsProps = {
   canCompare: boolean;
   isCompareLoading: boolean;
   askInputRef?: RefObject<HTMLTextAreaElement | null>;
+  similarityMetric: SimilarityMetric;
 };
 
 export default function AskControls(props: AskControlsProps) {
@@ -108,7 +117,6 @@ export default function AskControls(props: AskControlsProps) {
     question,
     setQuestion,
     topK,
-    setTopK,
     modelId,
     setModelId,
     canAsk,
@@ -116,83 +124,31 @@ export default function AskControls(props: AskControlsProps) {
     onAsk,
     onQuestionKeyDown,
     askInputRef,
+    similarityMetric,
   } = props;
 
-  const decreaseTopK = () => {
-    const next = Math.max(1, topK - 1);
-    setTopK(next);
-  };
-
-  const increaseTopK = () => {
-    const next = Math.min(20, topK + 1);
-    setTopK(next);
-  };
-
-  const handleTopKChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.trim();
-
-    if (raw === "") {
-      setTopK(1);
-      return;
-    }
-
-    const parsed = parseInt(raw, 10);
-    if (Number.isNaN(parsed)) return;
-
-    const clamped = Math.min(20, Math.max(1, parsed));
-    setTopK(clamped);
-  };
+  const scopeText = selectedDoc
+    ? `Answering for document: ${selectedDoc}`
+    : "Searching across all indexed documents";
 
   return (
     <div className="flex flex-col gap-4">
       <div className="text-xs text-slate-400 space-y-1">
-        <div className="mb-4 font-bold">
-          {selectedDoc
-            ? `Answering for document: ${selectedDoc}`
-            : "Searching across all indexed documents."}
-        </div>
+        <p className="mb-2">
+          <span className="font-semibold">{scopeText}</span>, using{" "}
+          <span className="font-semibold">Top K = {topK}</span>, and{" "}
+          <span className="font-semibold">
+            {SIMILARITY_LABELS[similarityMetric]} function
+          </span>{" "}
+          (configured in section 2).
+        </p>
 
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2">
-            <span>Top&nbsp;K:</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={decreaseTopK}
-                className="flex h-7 w-7 items-center justify-center rounded-full
-                           border border-slate-600 bg-slate-900
-                           text-xs text-slate-100 hover:bg-slate-800"
-              >
-                <span className="text-xl pb-1">–</span>
-              </button>
-
-              <input
-                type="text"
-                inputMode="numeric"
-                value={topK}
-                onChange={handleTopKChange}
-                className="w-12 rounded-md border border-slate-700 bg-slate-800
-                           px-2 py-1 text-xs text-slate-100 text-center
-                           focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
-
-              <button
-                type="button"
-                onClick={increaseTopK}
-                className="flex h-7 w-7 items-center justify-center rounded-full
-                           border border-slate-600 bg-slate-900
-                           text-xs text-slate-100 hover:bg-slate-800"
-              >
-                <span className="text-xl pb-1">+</span>
-              </button>
-            </div>
-          </label>
-
+        <div className="mt-1 pt-3 flex flex-wrap items-center gap-3">
           <label className="flex flex-col items-start gap-1 sm:flex-row sm:items-center">
             <span>Choose model:</span>
             <select
               className="w-full sm:w-auto max-w-full bg-slate-800 border border-slate-700 rounded
-                         px-2 py-1 text-[11px] sm:text-xs text-slate-100"
+                       px-2 py-1 text-[11px] sm:text-xs text-slate-100"
               value={modelId}
               onChange={(e) => setModelId(e.target.value)}
             >
