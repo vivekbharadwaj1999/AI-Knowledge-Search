@@ -2055,7 +2055,7 @@ function App() {
               className="inline-flex items-center justify-center rounded-full px-3 py-3 text-xs font-medium
                          bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 border border-emerald-400
                          active:scale-95 transition-transform">
-              <span className="mr-1">🡸</span>
+              <span className="mr-1">◀</span>
               <span>OPERATIONS</span>
             </button>
           ) : (
@@ -2069,7 +2069,7 @@ function App() {
                          bg-sky-500 text-white shadow-lg shadow-sky-500/40 border border-sky-400
                          active:scale-95 transition-transform">
               <span>OUTPUT</span>
-              <span className="ml-1">🡺</span>
+              <span className="ml-1">▶</span>
             </button>
           )}
         </div>
