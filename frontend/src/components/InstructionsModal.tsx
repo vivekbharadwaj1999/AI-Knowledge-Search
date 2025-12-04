@@ -49,10 +49,10 @@ const steps: Step[] = [
   },
   {
     id: "similarity",
-    navLabel: "Similarity functions",
-    title: "3. Similarity functions (Cosine, distance, and hybrid)",
+    navLabel: "Similarity func. and Top K",
+    title: "3. Similarity functions and Top K",
     description:
-      "For advanced experiments, VivBot lets you choose how similarity between embeddings is measured.",
+      "For experiments, VivBot lets you choose how similarity between embeddings is measured and also how many Top K relevant chunks are retrieved.",
     points: [
       "You can pick the similarity function used to rank context chunks in all operations below (Relations between documents, Ask, Compare, Critique).",
       "Available metrics include:",
@@ -62,6 +62,7 @@ const steps: Step[] = [
       "**Dot product**: raw dot product between embedding vectors.",
       "**Hybrid (Cosine + Jaccard)**: combines cosine similarity with Jaccard overlap over token sets.",
       "Changing the metric can affect which chunks are selected, how similarity is grounded, and how highlight rankings behave.",
+      "Set “Top K” to control how many relevant chunks are retrieved from the vector store.",
     ],
   },
   {
@@ -72,7 +73,6 @@ const steps: Step[] = [
       "Section 3 answers questions using only the selected document(s) or all documents as context.",
     points: [
       "Check the “Answering for document …” text to see which document is active.",
-      "Set “Top K” to control how many chunks are retrieved from the vector store.",
       "Pick a default model (for example LLaMA 3.1 8B Instant).",
       "Type a question about the selected document and press “Ask”.",
       "The answer appears on the right, together with the retrieved context.",
@@ -215,10 +215,9 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
                       mobileTabRefs.current[idx] = el;
                     }}
                     className={`shrink-0 rounded-full px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap border transition
-                      ${
-                        active
-                          ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/60"
-                          : "border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                      ${active
+                        ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/60"
+                        : "border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
                       }`}
                   >
                     {s.navLabel}
@@ -240,11 +239,10 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
                     key={s.id}
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
-                    className={`w-full rounded-lg px-3 py-1.5 text-left text-sm transition ${
-                      active
+                    className={`w-full rounded-lg px-3 py-1.5 text-left text-sm transition ${active
                         ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
                         : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
-                    }`}
+                      }`}
                   >
                     {s.navLabel}
                   </button>
