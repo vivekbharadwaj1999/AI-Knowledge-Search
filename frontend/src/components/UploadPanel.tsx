@@ -34,14 +34,22 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <input
-        type="file"
-        accept=".pdf,.txt,.csv,.docx,.pptx,.xlsx"
-        onChange={handleChange}
-        className="block w-full text-sm text-slate-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg
-                 file:border-0 file:text-sm file:font-semibold file:bg-sky-600 file:text-white
-                 hover:file:bg-sky-500"
-      />
+      <div className="flex items-center gap-3">
+        <label className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium
+                     bg-sky-600 hover:bg-sky-500 cursor-pointer">
+          Choose File
+          <input
+            type="file"
+            accept=".pdf,.txt,.csv,.docx,.pptx,.xlsx"
+            onChange={handleChange}
+            className="hidden"
+          />
+        </label>
+
+        <span className="text-sm text-slate-200 truncate">
+          {file ? file.name : "No file chosen"}
+        </span>
+      </div>
       <button
         onClick={handleUpload}
         disabled={!file || isUploading}

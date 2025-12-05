@@ -20,7 +20,7 @@ const steps: Step[] = [
     navLabel: "Overview",
     title: "Welcome to VivBot - An AI Document Knowledge Search",
     description:
-      "VivBot lets you upload documents, run grounded Q&A, compare LLMs, generate AI reports and insights, and run advanced critique pipelines with configurable similarity metrics for research.",
+      "VivBot lets you upload documents, set configurable similarity metrics and Top K, run grounded Q&A, compare LLMs, generate AI reports and insights, and run critique pipelines for research.",
   },
   {
     id: "upload",
@@ -41,10 +41,10 @@ const steps: Step[] = [
     description:
       "Use section 2 to decide which documents are used when answering questions or generating reports.",
     points: [
-      "Choose “All documents” to search across everything, or select a single document from the dropdown.",
+      "Choose “All documents” to search across all uploaded documents, or select a single document from the dropdown.",
       "“Generate AI Report” creates a structured explanation of the selected document.",
       "“Relations between these documents” explores how multiple documents are related in the vector space.",
-      "“Remove all documents” clears the current index so you can start over.",
+      "“Remove all documents” removes all uploaded documents so you can start over.",
     ],
   },
   {
@@ -52,17 +52,17 @@ const steps: Step[] = [
     navLabel: "Similarity func. and Top K",
     title: "3. Similarity functions and Top K",
     description:
-      "For experiments, VivBot lets you choose how similarity between embeddings is measured and also how many Top K relevant chunks are retrieved.",
+      "For experiments, VivBot lets you choose how similarity between embeddings is measured and how many Top K relevant chunks are retrieved.",
     points: [
-      "You can pick the similarity function used to rank context chunks in all operations below (Relations between documents, Ask, Compare, Critique).",
+      "You can pick the similarity function used to rank context chunks in all operations (Relations, Ask, Compare, Critique).",
       "Available metrics include:",
-      "**Cosine similarity**: standard choice for normalised embeddings.",
-      "**Negative Manhattan distance (L1)**: −‖x − y‖₁, emphasises sparse differences.",
-      "**Negative Euclidean distance (L2)**: −‖x − y‖₂, punishes large deviations strongly.",
-      "**Dot product**: raw dot product between embedding vectors.",
-      "**Hybrid (Cosine + Jaccard)**: combines cosine similarity with Jaccard overlap over token sets.",
+      "**Cosine similarity**: Measures the angle between two vectors. High when the embeddings point in the same direction, regardless of magnitude. Formula: (x · y) / (‖x‖ ‖y‖)",
+      "**Negative Manhattan distance (L1)**: Uses the sum of absolute differences between coordinates. High (good) when vectors differ only slightly across many dimensions. Resilient to noise. Formula: −Σ |xᵢ − yᵢ|",
+      "**Negative Euclidean distance (L2)**: Uses the straight line distance between vectors. Punishes large individual deviations strongly, making mismatches stand out.Formula: −√(Σ (xᵢ − yᵢ)²)",
+      "**Dot product**: Measures magnitude × alignment. Favors vectors that are both similar and high energy (large norms). Formula: Σ xᵢ yᵢ",
+      "**Hybrid (Cosine + Jaccard)**: Blends semantic similarity (cosine) with token overlap similarity (Jaccard). Rewards embeddings that match in meaning and share lexical structure. Formula: α·cosine(x,y) + (1−α)·(|A ∩ B| / |A ∪ B|)",
       "Changing the metric can affect which chunks are selected, how similarity is grounded, and how highlight rankings behave.",
-      "Set “Top K” to control how many relevant chunks are retrieved from the vector store.",
+      "Set “Top K” to control how many relevant chunks are retrieved from the vector store. **Top K** sets how many top ranked document chunks are selected. Higher values give the model more context, lower values make retrieval stricter.",
     ],
   },
   {
@@ -73,10 +73,10 @@ const steps: Step[] = [
       "Section 3 answers questions using only the selected document(s) or all documents as context.",
     points: [
       "Check the “Answering for document …” text to see which document is active.",
-      "Pick a default model (for example LLaMA 3.1 8B Instant).",
+      "Pick an LLM (for example LLaMA 3.1 8B Instant).",
       "Type a question about the selected document and press “Ask”.",
       "The answer appears on the right, together with the retrieved context.",
-      "Use the **Highlight Context** after using Auto Insights on each answer card to inspect context:",
+      "Use the **Highlight Context** after using Auto Insights on each answer card to inspect context and check highlighted parts of it:",
       "**AI**: highlights the exact spans the model seems to rely on most.",
       "**Keywords**: highlights chunks that best match your query terms.",
       "**Sentences**: highlights the most similar sentences in each chunk.",
@@ -120,9 +120,10 @@ const steps: Step[] = [
       "Ask a question you want to analyse more deeply in the “Critique answer & prompt” section.",
       "VivBot checks for prompt problems such as: missing context, vagueness, multi questions, or unclear audience.",
       "The answer itself is critiqued for grounding, reasoning quality, structure, and possible hallucinations.",
-      "You can enable a **double critique loop**, where one model first critiques the answer, and this loop is run once more to refine the answer.",
+      "You can enable a **double critique loop**, where one model first critiques the answer and the prompt, suggest a new improved prompt, and this is again given back to the answering model to refine the answer.",
       "This pipeline helps you iteratively improve both the prompt and the answer quality.",
       "The output also shows the differences in the accuracy of the answer from both rounds.",
+      "The output also shows the differences in the correctness, hallucinations, and similarity of the answer from both rounds.",
     ],
   },
   {
@@ -133,7 +134,7 @@ const steps: Step[] = [
       "All results show up as separate cards on the right side of the screen.",
     points: [
       "Ask, Compare, AI Reports, Auto Insights, and Critique each create their own card.",
-      "You can scroll back through previous results at any time.",
+      "You can scroll down through previous results at any time.",
       "Use the **OUTPUT** and **OPERATIONS** buttons at the bottom on mobile to switch between viewing the output panel and the operations panel.",
     ],
   },
@@ -241,8 +242,8 @@ export default function InstructionsModal({ open, onClose }: InstructionsModalPr
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
                     className={`w-full rounded-lg px-3 py-1.5 text-left text-sm transition ${active
-                        ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
-                        : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                      ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
+                      : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
                       }`}
                   >
                     {s.navLabel}
