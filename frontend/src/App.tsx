@@ -635,14 +635,23 @@ function App() {
   const [rightMaxHeight, setRightMaxHeight] = useState<number | undefined>();
 
   const appendOutput = (entry: OutputEntryBase) => {
-    setOutputFeed((prev): OutputEntry[] => [
-      ...prev,
-      {
-        ...entry,
-        id: prev.length ? prev[prev.length - 1].id + 1 : 1,
-      },
-    ]);
+    setOutputFeed((prev): OutputEntry[] => {
+      const maxId = prev.reduce(
+        (acc, item) => (item.id > acc ? item.id : acc),
+        0
+      );
+      const nextId = maxId + 1;
+
+      return [
+        {
+          ...entry,
+          id: nextId,
+        },
+        ...prev,
+      ];
+    });
   };
+
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -688,12 +697,9 @@ function App() {
     fetchDocuments()
       .then((data) => {
         setDocuments(data.documents);
+
         if (data.documents.length > 0) {
-          setSelectedDoc((prev) =>
-            prev && data.documents.includes(prev)
-              ? prev
-              : data.documents[data.documents.length - 1]
-          );
+          setSelectedDoc(data.documents[data.documents.length - 1]);
         } else {
           setSelectedDoc(undefined);
         }
