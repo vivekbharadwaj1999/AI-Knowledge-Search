@@ -249,6 +249,80 @@ def get_critique_log_rows():
     return CritiqueLogResponse(rows=rows)
 
 
+@app.post("/analyze")
+async def analyze_operation(payload: dict):
+    operation = payload.get("operation", "").lower()
+
+    if operation not in ["ask", "compare", "critique"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid operation. Must be 'ask', 'compare', or 'critique'"
+        )
+
+    from app.qa import (
+        analyze_ask_with_all_methods,
+        analyze_compare_with_all_methods,
+        analyze_critique_with_all_methods
+    )
+
+    if operation == "ask":
+        question = payload.get("question", "").strip()
+        if not question:
+            raise HTTPException(status_code=400, detail="Question required")
+
+        result = analyze_ask_with_all_methods(
+            question=question,
+            k=payload.get("top_k", 7),
+            doc_name=payload.get("doc_name"),
+            model=payload.get("model")
+        )
+
+    elif operation == "compare":
+        question = payload.get("question", "").strip()
+        models = payload.get("models", [])
+
+        if not question:
+            raise HTTPException(status_code=400, detail="Question required")
+        if not models or len(models) < 2:
+            raise HTTPException(
+                status_code=400, detail="Need at least 2 models")
+
+        result = analyze_compare_with_all_methods(
+            question=question,
+            models=models,
+            k=payload.get("top_k", 7),
+            doc_name=payload.get("doc_name")
+        )
+
+    elif operation == "critique":
+        question = payload.get("question", "").strip()
+        answer_model = payload.get("answer_model")
+        critic_model = payload.get("critic_model")
+        max_rounds = int(payload.get("max_rounds", 2))
+        self_correct = max_rounds > 1
+
+        if not question:
+            raise HTTPException(status_code=400, detail="Question required")
+        if not answer_model:
+            raise HTTPException(status_code=400, detail="answer_model required")
+        if not critic_model:
+            raise HTTPException(status_code=400, detail="critic_model required")
+
+        result = analyze_critique_with_all_methods(
+            question=question,
+            answer_model=answer_model,
+            critic_model=critic_model,
+            k=payload.get("top_k", 7),
+            doc_name=payload.get("doc_name"),
+            self_correct=self_correct,
+        )
+
+    return {
+        "operation": operation,
+        **result
+    }
+
+
 @app.post("/reset-critique-log")
 def reset_critique_log_endpoint():
     """

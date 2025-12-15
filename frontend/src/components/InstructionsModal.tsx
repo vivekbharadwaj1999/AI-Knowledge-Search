@@ -58,7 +58,7 @@ const steps: Step[] = [
       "Available metrics include:",
       "**Cosine similarity**: Measures the angle between two vectors. High when the embeddings point in the same direction, regardless of magnitude. Formula: (x · y) / (‖x‖ ‖y‖)",
       "**Negative Manhattan distance (L1)**: Uses the sum of absolute differences between coordinates. High (good) when vectors differ only slightly across many dimensions. Resilient to noise. Formula: −Σ |xᵢ − yᵢ|",
-      "**Negative Euclidean distance (L2)**: Uses the straight line distance between vectors. Punishes large individual deviations strongly, making mismatches stand out.Formula: −√(Σ (xᵢ − yᵢ)²)",
+      "**Negative Euclidean distance (L2)**: Uses the straight line distance between vectors. Punishes large individual deviations strongly, making mismatches stand out. Formula: −√(Σ (xᵢ − yᵢ)²)",
       "**Dot product**: Measures magnitude × alignment. Favors vectors that are both similar and high energy (large norms). Formula: Σ xᵢ yᵢ",
       "**Hybrid (Cosine + Jaccard)**: Blends semantic similarity (cosine) with token overlap similarity (Jaccard). Rewards embeddings that match in meaning and share lexical structure. Formula: α·cosine(x,y) + (1−α)·(|A ∩ B| / |A ∪ B|)",
       "Changing the metric can affect which chunks are selected, how similarity is grounded, and how highlight rankings behave.",
@@ -127,9 +127,21 @@ const steps: Step[] = [
     ],
   },
   {
+    id: "advanced",
+    navLabel: "Advanced analysis",
+    title: "8. Advanced analysis",
+    description:
+      "Advanced analysis runs a deeper, structured breakdown of an existing Ask / Compare / Critique result using the same scope, and Top K, but with every similarity function.",
+    points: [
+      "After you run **Ask**, **Compare**, or **Critique**, use the **Advanced analysis** button on that output card.",
+      "This generates an additional analysis card that helps you inspect the result more deeply (useful for research / evaluation).",
+      "If your retrieval settings change (scope / Top K), rerun the operation to analyze the new grounding context.",
+    ],
+  },
+  {
     id: "output",
     navLabel: "Output panel",
-    title: "8. Output panel on the right",
+    title: "9. Output panel on the right",
     description:
       "All results show up as separate cards on the right side of the screen.",
     points: [
