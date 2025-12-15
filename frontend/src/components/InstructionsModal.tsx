@@ -30,6 +30,7 @@ const steps: Step[] = [
       "Start by uploading a document in section 1: “Upload & index a document”. Supported formats include PDF, TXT, CSV, DOCX, XLSX, and PPTX.",
     points: [
       "Click “Choose File” and pick a document from your computer.",
+      "Adjust **Chunk size** to control how documents are split before indexing. Smaller chunks give finer grained retrieval, larger chunks preserve more context. Changing chunk size requires reuploading the document.",
       "Press “Upload & Index” to chunk the file and create vector embeddings.",
       "Once indexed, the document appears in the dropdown used by the later sections.",
     ],
@@ -49,8 +50,8 @@ const steps: Step[] = [
   },
   {
     id: "similarity",
-    navLabel: "Similarity func. and Top K",
-    title: "3. Similarity functions and Top K",
+    navLabel: "Similarity, Top K, & Norm.",
+    title: "3. Similarity functions, Top K and Vector normalization",
     description:
       "For experiments, VivBot lets you choose how similarity between embeddings is measured and how many Top K relevant chunks are retrieved.",
     points: [
@@ -63,6 +64,7 @@ const steps: Step[] = [
       "**Hybrid (Cosine + Jaccard)**: Blends semantic similarity (cosine) with token overlap similarity (Jaccard). Rewards embeddings that match in meaning and share lexical structure. Formula: α·cosine(x,y) + (1−α)·(|A ∩ B| / |A ∪ B|)",
       "Changing the metric can affect which chunks are selected, how similarity is grounded, and how highlight rankings behave.",
       "Set “Top K” to control how many relevant chunks are retrieved from the vector store. **Top K** sets how many top ranked document chunks are selected. Higher values give the model more context, lower values make retrieval stricter.",
+      "Use **Vector normalization** to control whether embeddings are L2 normalized before scoring. When enabled, cosine and dot product behave equivalently; when disabled, dot product also reflects vector magnitude.",
     ],
   },
   {
@@ -131,11 +133,11 @@ const steps: Step[] = [
     navLabel: "Advanced analysis",
     title: "8. Advanced analysis",
     description:
-      "Advanced analysis runs a deeper, structured breakdown of an existing Ask / Compare / Critique result using the same scope, and Top K, but with every similarity function.",
+      "Advanced analysis runs a deeper, structured breakdown of an existing Ask / Compare / Critique result using the same scope, Top K, and normalization but with every similarity function.",
     points: [
       "After you run **Ask**, **Compare**, or **Critique**, use the **Advanced analysis** button on that output card.",
       "This generates an additional analysis card that helps you inspect the result more deeply (useful for research / evaluation).",
-      "If your retrieval settings change (scope / Top K), rerun the operation to analyze the new grounding context.",
+      "If your retrieval settings change (scope / Top K / normalization), rerun the operation to analyze the new grounding context.",
     ],
   },
   {

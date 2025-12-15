@@ -176,6 +176,7 @@ def run_critique(
     doc_name: Optional[str] = None,
     self_correct: bool = False,
     similarity: Optional[str] = None,
+    normalize_vectors: bool = True,
 ) -> Dict[str, Any]:
     from app.qa import answer_question
     llm = LLMClient()
@@ -202,6 +203,7 @@ def run_critique(
             doc_name=doc_name,
             model=answer_model,
             similarity=similarity,
+            normalize_vectors=normalize_vectors,
         )
 
         prompt = _build_critique_prompt(current_question, answer, context)

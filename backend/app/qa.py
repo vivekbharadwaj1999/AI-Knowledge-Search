@@ -5,6 +5,13 @@ from app.vector_store import similarity_search, _load_records
 from app.critique import run_critique
 
 
+def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
+    n = math.sqrt(sum(x * x for x in v))
+    if n <= eps:
+        return v
+    return [x / n for x in v]
+
+
 def build_prompt(question: str, context_chunks: List[str]) -> str:
     context_text = "\n\n---\n\n".join(context_chunks)
     return f"""You are a helpful assistant that answers questions based on the provided context.
@@ -27,6 +34,7 @@ def answer_question(
     doc_name: Optional[str] = None,
     model: Optional[str] = None,
     similarity: Optional[str] = None,
+    normalize_vectors: bool = True,
 ):
     embed_client = EmbeddingClient()
     query_embedding = embed_client.embed_query(question)
@@ -37,6 +45,7 @@ def answer_question(
         doc_name=doc_name,
         similarity=similarity or "cosine",
         query_text=question,
+        normalize_vectors=normalize_vectors,
     )
 
     context_for_llm: List[str] = []
@@ -70,8 +79,16 @@ def answer_question(
     return answer, plain_chunks, sources
 
 
-def calculate_all_similarities(query_embedding: List[float], chunk_embedding: List[float], query_text: str, chunk_text: str) -> Dict[str, float]:
-    """Calculate all 5 similarity metrics for a chunk"""
+def calculate_all_similarities(
+    query_embedding: List[float],
+    chunk_embedding: List[float],
+    chunk_text: str,
+    query_text: str,
+    normalize_vectors: bool = True,
+) -> Dict[str, float]:
+    if normalize_vectors:
+        query_embedding = _l2_normalize(query_embedding)
+        chunk_embedding = _l2_normalize(chunk_embedding)
 
     def _cosine(a, b):
         if len(a) != len(b):
@@ -115,7 +132,8 @@ def calculate_all_similarities(query_embedding: List[float], chunk_embedding: Li
 def get_chunks_for_all_methods(
     query_text: str,
     k: int = 7,
-    doc_name: Optional[str] = None
+    doc_name: Optional[str] = None,
+    normalize_vectors: bool = True,
 ) -> Dict[str, Any]:
     embed_client = EmbeddingClient()
     query_embedding = embed_client.embed_query(query_text)
@@ -140,7 +158,12 @@ def get_chunks_for_all_methods(
 
         text = rec.get("text", "")
         scores = calculate_all_similarities(
-            query_embedding, emb, query_text, text)
+            query_embedding=query_embedding,
+            chunk_embedding=emb,
+            chunk_text=text,
+            query_text=query_text,
+            normalize_vectors=normalize_vectors,
+        )
 
         chunks_with_scores.append({
             "doc_name": rec.get("doc_name", "Unknown"),
@@ -213,9 +236,12 @@ def analyze_ask_with_all_methods(
     question: str,
     k: int = 7,
     doc_name: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    normalize_vectors: bool = True,
 ) -> Dict[str, Any]:
-    retrieval_data = get_chunks_for_all_methods(question, k, doc_name)
+    retrieval_data = get_chunks_for_all_methods(
+        question, k, doc_name, normalize_vectors=normalize_vectors
+    )
     if "error" in retrieval_data:
         return retrieval_data
 
@@ -269,9 +295,12 @@ def analyze_compare_with_all_methods(
     question: str,
     models: List[str],
     k: int = 7,
-    doc_name: Optional[str] = None
+    doc_name: Optional[str] = None,
+    normalize_vectors: bool = True,
 ) -> Dict[str, Any]:
-    retrieval_data = get_chunks_for_all_methods(question, k, doc_name)
+    retrieval_data = get_chunks_for_all_methods(
+        question, k, doc_name, normalize_vectors=normalize_vectors
+    )
     if "error" in retrieval_data:
         return retrieval_data
 
@@ -333,8 +362,11 @@ def analyze_critique_with_all_methods(
     k: int = 7,
     doc_name: Optional[str] = None,
     self_correct: bool = True,
+    normalize_vectors: bool = True,
 ) -> Dict[str, Any]:
-    retrieval_data = get_chunks_for_all_methods(question, k, doc_name)
+    retrieval_data = get_chunks_for_all_methods(
+        question, k, doc_name, normalize_vectors=normalize_vectors
+    )
     if "error" in retrieval_data:
         return retrieval_data
 

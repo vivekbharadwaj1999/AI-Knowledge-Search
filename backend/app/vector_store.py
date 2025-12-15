@@ -6,6 +6,17 @@ from typing import Any, Dict, List, Optional
 VECTOR_STORE_PATH = os.path.join("data", "vector_store.jsonl")
 
 
+def _l2_norm(v: List[float]) -> float:
+    return math.sqrt(sum(x * x for x in v))
+
+
+def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
+    n = _l2_norm(v)
+    if n <= eps:
+        return v
+    return [x / n for x in v]
+
+
 def _ensure_dir():
     os.makedirs(os.path.dirname(VECTOR_STORE_PATH), exist_ok=True)
 
@@ -103,6 +114,7 @@ def similarity_search(
     doc_name: Optional[str] = None,
     similarity: str = "cosine",
     query_text: Optional[str] = None,
+    normalize_vectors: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Return top-k records most similar to the query.
@@ -133,18 +145,22 @@ def similarity_search(
 
         text = rec.get("text") or ""
 
+        q = _l2_normalize(
+            query_embedding) if normalize_vectors else query_embedding
+        e = _l2_normalize(emb) if normalize_vectors else emb
+
         if similarity == "dot":
-            score = _dot(query_embedding, emb)
+            score = _dot(q, e)
         elif similarity == "neg_l2":
-            score = _neg_l2(query_embedding, emb)
+            score = _neg_l2(q, e)
         elif similarity == "neg_l1":
-            score = _neg_l1(query_embedding, emb)
+            score = _neg_l1(q, e)
         elif similarity == "hybrid" and query_text:
-            base = _cosine_similarity(query_embedding, emb)
+            base = _cosine_similarity(q, e)
             kw = _keyword_overlap_score(query_text, text)
             score = 0.7 * base + 0.3 * kw
         else:
-            score = _cosine_similarity(query_embedding, emb)
+            score = _cosine_similarity(q, e)
 
         enriched = dict(rec)
         enriched["score"] = float(score)

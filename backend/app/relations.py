@@ -5,6 +5,13 @@ from app.vector_store import get_document_embeddings, get_document_previews
 from app.schemas import CrossDocRelations, DocPairRelation
 
 
+def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
+    n = sum(x * x for x in v) ** 0.5
+    if n <= eps:
+        return v
+    return [x / n for x in v]
+
+
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     if len(a) != len(b):
         return 0.0
@@ -63,11 +70,12 @@ def analyze_cross_document_relations(
     max_pairs: int = 12,
     min_similarity: float = 0.2,
     similarity: str = "cosine",
+    normalize_vectors: bool = True,
 ) -> CrossDocRelations:
-    """
-    Compute pairwise similarities between documents and let the LLM
-    describe how they relate.
-    """
+    if normalize_vectors:
+        emb_a = _l2_normalize(emb_a)
+        emb_b = _l2_normalize(emb_b)
+
     doc_embeddings = get_document_embeddings()
     doc_previews = get_document_previews()
 

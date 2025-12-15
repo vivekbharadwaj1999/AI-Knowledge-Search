@@ -682,6 +682,7 @@ function App() {
   const [relationsLoading, setRelationsLoading] = useState(false);
   const [enableSelfCorrect, setEnableSelfCorrect] = useState(false);
   const [similarityMetric, setSimilarityMetric] = useState<SimilarityMetric>("cosine");
+  const [normalizeVectors, setNormalizeVectors] = useState(true);
   const [hasCritiqueLogs, setHasCritiqueLogs] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [mobileView, setMobileView] = useState<"operations" | "output">(
@@ -915,8 +916,8 @@ function App() {
 
     try {
       const [leftRes, rightRes] = await Promise.all([
-        askQuestion(trimmed, topK, selectedDoc, modelLeft, similarityMetric),
-        askQuestion(trimmed, topK, selectedDoc, modelRight, similarityMetric),
+        askQuestion(trimmed, topK, selectedDoc, modelLeft, similarityMetric, normalizeVectors),
+        askQuestion(trimmed, topK, selectedDoc, modelRight, similarityMetric, normalizeVectors),
       ]);
 
       const nextId = comparisons.length
@@ -971,6 +972,7 @@ function App() {
         doc_name: useAllDocs ? undefined : selectedDoc,
         self_correct: enableSelfCorrect,
         similarity: similarityMetric,
+        normalize_vectors: normalizeVectors,
       });
 
       const nextId =
@@ -1077,7 +1079,10 @@ function App() {
 
     try {
       setRelationsLoading(true);
-      const data = await fetchDocumentRelations({ similarity: similarityMetric });
+      const data = await fetchDocumentRelations({
+        similarity: similarityMetric,
+        normalize_vectors: normalizeVectors,
+      });
       appendOutput({ kind: "relations", relations: data });
     } catch (err) {
       console.error("Failed to analyze relations", err);
@@ -1098,6 +1103,7 @@ function App() {
         operation: msg.operation,
         top_k: msg.topK || 7,
         doc_name: msg.docName || undefined,
+        normalize_vectors: normalizeVectors,
       };
 
       if (msg.operation === "ask") {
@@ -1139,6 +1145,7 @@ function App() {
         models: [cmp.left.model, cmp.right.model],
         top_k: topK,
         doc_name: useAllDocs ? undefined : selectedDoc,
+        normalize_vectors: normalizeVectors,
       };
 
       const result = await analyzeOperation(params);
@@ -1171,6 +1178,7 @@ function App() {
         top_k: topK,
         doc_name: useAllDocs ? undefined : selectedDoc,
         max_rounds: crt.rounds?.length ?? 1,
+        normalize_vectors: normalizeVectors,
       };
 
       const result = await analyzeOperation(params);
@@ -1223,6 +1231,9 @@ function App() {
           <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-slate-800">
             <h2 className="text-sm sm:text-base font-semibold mb-3">
               1. Upload & index a document
+              <span className="text-[11px] text-slate-400 ml-2">
+                (Currently supports PDF, TXT, CSV, DOCX, PPTX, XSLX file formats).
+              </span>
             </h2>
             <UploadPanel onIndexed={() => setDocVersion((v) => v + 1)} />
           </div>
@@ -1240,8 +1251,8 @@ function App() {
               setUseAllDocs={setUseAllDocs}
             />
 
-            <div className="mt-4 pb-2 pt-4 flex flex-col sm:flex-row gap-4 items-start">
-              <div className="space-y-2 flex-1">
+            <div className="mt-4 pb-2 pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+              <div className="space-y-2">
                 <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
                   Similarity function
                 </h3>
@@ -1253,9 +1264,7 @@ function App() {
                 <select
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
                   value={similarityMetric}
-                  onChange={(e) =>
-                    setSimilarityMetric(e.target.value as SimilarityMetric)
-                  }
+                  onChange={(e) => setSimilarityMetric(e.target.value as SimilarityMetric)}
                 >
                   <option value="cosine">Cosine (default)</option>
                   <option value="dot">Dot product</option>
@@ -1272,15 +1281,16 @@ function App() {
                 <p className="text-[11px] text-slate-400">
                   Used for Ask, Compare, and Critique.
                 </p>
-                <label className="flex items-center gap-2 text-xs text-slate-300 pt-4">
+
+                <label className="flex items-center gap-2 text-xs text-slate-300 pt-4 sm:pt-8">
                   <span>Top&nbsp;K:</span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={decreaseTopK}
                       className="flex h-7 w-7 items-center justify-center rounded-full
-                     border border-slate-600 bg-slate-900
-                     text-xs text-slate-100 hover:bg-slate-800"
+                   border border-slate-600 bg-slate-900
+                   text-xs text-slate-100 hover:bg-slate-800"
                     >
                       <span className="text-xl pb-1">–</span>
                     </button>
@@ -1291,21 +1301,51 @@ function App() {
                       value={topK}
                       onChange={handleTopKChange}
                       className="w-12 rounded-md border border-slate-700 bg-slate-800
-                     px-2 py-1 text-xs text-slate-100 text-center
-                     focus:outline-none focus:ring-2 focus:ring-sky-500"
+                   px-2 py-1 text-xs text-slate-100 text-center
+                   focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
 
                     <button
                       type="button"
                       onClick={increaseTopK}
                       className="flex h-7 w-7 items-center justify-center rounded-full
-                     border border-slate-600 bg-slate-900
-                     text-xs text-slate-100 hover:bg-slate-800"
+                   border border-slate-600 bg-slate-900
+                   text-xs text-slate-100 hover:bg-slate-800"
                     >
                       <span className="text-xl pb-1">+</span>
                     </button>
                   </div>
                 </label>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
+                  Vector normalization
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  If ON, embeddings are L2 normalized before scoring (dot ≈ cosine).
+                </p>
+
+                <div className="pt-2 sm:pt-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNormalizeVectors((v) => !v)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${normalizeVectors ? "bg-emerald-500" : "bg-slate-600"
+                        }`}
+                      aria-pressed={normalizeVectors}
+                      aria-label="Toggle vector normalization"
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${normalizeVectors ? "translate-x-4" : "translate-x-1"
+                          }`}
+                      />
+                    </button>
+                    <span className="ml-1 text-base text-slate-300">
+                      {normalizeVectors ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mt-2">
@@ -1609,27 +1649,27 @@ function App() {
                           {msg.modelUsed && <span>Model: {msg.modelUsed}</span>}
                         </div>
                         <div className="mt-2 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => handleAdvancedAnalysis(msg.id)}
-                          disabled={analysisLoading[msg.id]}
-                          className="inline-flex items-center gap-1 rounded-md border border-sky-500/70 bg-sky-600 hover:bg-sky-500 px-2 py-1 text-[11px] text-white disabled:opacity-50 transition"
-                          title="Compare all 5 similarity methods"
-                        >
-                          {analysisLoading[msg.id] ? (
-                            <>
-                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                              </svg>
-                              <span>Analyzing...</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>Advanced Analysis</span>
-                            </>
-                          )}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdvancedAnalysis(msg.id)}
+                            disabled={analysisLoading[msg.id]}
+                            className="inline-flex items-center gap-1 rounded-md border border-sky-500/70 bg-sky-600 hover:bg-sky-500 px-2 py-1 text-[11px] text-white disabled:opacity-50 transition"
+                            title="Compare all 5 similarity methods"
+                          >
+                            {analysisLoading[msg.id] ? (
+                              <>
+                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                <span>Analyzing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Advanced Analysis</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                         <div className="mt-1">
                           <div className="text-[11px] text-sky-300">

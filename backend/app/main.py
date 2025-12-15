@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 import json
@@ -56,7 +56,11 @@ def root():
 
 
 @app.post("/ingest")
-async def ingest_document(file: UploadFile = File(...)):
+async def ingest_document(
+    file: UploadFile = File(...),
+    chunk_size: int = Form(800),
+    chunk_overlap: int = Form(200),
+):
     allowed_exts = (".pdf", ".txt", ".csv", ".docx", ".pptx", ".xlsx")
     ext = os.path.splitext(file.filename)[1].lower()
 
@@ -70,7 +74,12 @@ async def ingest_document(file: UploadFile = File(...)):
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    chunk_count = ingest_file(file_path, doc_name=file.filename)
+    chunk_count = ingest_file(
+        file_path,
+        doc_name=file.filename,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
     if chunk_count == 0:
         raise HTTPException(
             status_code=400,
@@ -91,6 +100,7 @@ async def ask_question_route(payload: AskRequest):
         doc_name=payload.doc_name,
         model=payload.model,
         similarity=payload.similarity,
+        normalize_vectors=payload.normalize_vectors,
     )
 
     model_used = payload.model or GROQ_MODEL
@@ -145,6 +155,7 @@ async def document_relations_route(payload: CrossDocRelationsRequest):
         result = analyze_cross_document_relations(
             model=payload.model,
             similarity=payload.similarity,
+            normalize_vectors=payload.normalize_vectors,
         )
         return result
     except ValueError as e:
@@ -170,6 +181,7 @@ async def critique_route(payload: CritiqueRequest):
         doc_name=payload.doc_name,
         self_correct=payload.self_correct,
         similarity=payload.similarity,
+        normalize_vectors=payload.normalize_vectors,
     )
     return data
 
@@ -252,7 +264,7 @@ def get_critique_log_rows():
 @app.post("/analyze")
 async def analyze_operation(payload: dict):
     operation = payload.get("operation", "").lower()
-
+    normalize_vectors = bool(payload.get("normalize_vectors", True))
     if operation not in ["ask", "compare", "critique"]:
         raise HTTPException(
             status_code=400,
@@ -304,9 +316,11 @@ async def analyze_operation(payload: dict):
         if not question:
             raise HTTPException(status_code=400, detail="Question required")
         if not answer_model:
-            raise HTTPException(status_code=400, detail="answer_model required")
+            raise HTTPException(
+                status_code=400, detail="answer_model required")
         if not critic_model:
-            raise HTTPException(status_code=400, detail="critic_model required")
+            raise HTTPException(
+                status_code=400, detail="critic_model required")
 
         result = analyze_critique_with_all_methods(
             question=question,

@@ -10,8 +10,8 @@ import openpyxl
 from app.vector_store import add_embeddings
 from app.config import EmbeddingClient
 
-CHUNK_SIZE = 800  
-CHUNK_OVERLAP = 200 
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
 UPLOAD_DIR = "data/raw"
 
 
@@ -61,21 +61,17 @@ def read_pptx_text(file_path: str) -> str:
         if slide_lines:
             parts.append(f"Slide {slide_idx}:")
             parts.append("\n".join(slide_lines))
-            parts.append("") 
+            parts.append("")
 
     return "\n".join(parts)
 
 
 def read_xlsx_text(file_path: str) -> str:
-    """
-    Extract clean text from XLSX using pandas.
-    Removes messy merged-cell artefacts and 'nan nan' rows.
-    """
     sheets = pd.read_excel(file_path, sheet_name=None)
     parts: list[str] = []
 
     week_pattern = re.compile(r"Week\s*\d+", re.IGNORECASE)
-    date_pattern = re.compile(r"\d{1,2}\s\w+\s\d{4}")  
+    date_pattern = re.compile(r"\d{1,2}\s\w+\s\d{4}")
 
     for sheet_name, df in sheets.items():
 
@@ -116,9 +112,20 @@ def chunk_text(
     chunk_size: int = CHUNK_SIZE,
     overlap: int = CHUNK_OVERLAP,
 ) -> List[str]:
+    chunk_size = int(chunk_size)
+    overlap = int(overlap)
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be > 0")
+    if overlap < 0:
+        raise ValueError("overlap must be >= 0")
+    if overlap >= chunk_size:
+        overlap = max(0, chunk_size // 5)
+
     chunks = []
     start = 0
     length = len(text)
+
     while start < length:
         end = min(start + chunk_size, length)
         chunk = text[start:end]
@@ -130,7 +137,12 @@ def chunk_text(
     return chunks
 
 
-def ingest_file(file_path: str, doc_name: str) -> int:
+def ingest_file(
+    file_path: str,
+    doc_name: str,
+    chunk_size: int = CHUNK_SIZE,
+    chunk_overlap: int = CHUNK_OVERLAP,
+) -> int:
     if not os.path.exists(file_path):
         raise FileNotFoundError(file_path)
 
@@ -149,7 +161,8 @@ def ingest_file(file_path: str, doc_name: str) -> int:
     else:
         raise ValueError(f"Unsupported file type: {ext}")
 
-    chunks = chunk_text(full_text)
+    chunks = chunk_text(full_text, chunk_size=chunk_size,
+                        overlap=chunk_overlap)
     if not chunks:
         return 0
 
