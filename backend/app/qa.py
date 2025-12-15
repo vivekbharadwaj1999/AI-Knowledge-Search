@@ -119,7 +119,11 @@ def get_chunks_for_all_methods(
 ) -> Dict[str, Any]:
     embed_client = EmbeddingClient()
     query_embedding = embed_client.embed_query(query_text)
+    embedding_dimension = len(query_embedding)
+    embedding_preview = query_embedding[:100] if embedding_dimension > 0 else [
+    ]
     all_records = _load_records()
+
     if not all_records:
         return {"error": "No documents available"}
 
@@ -191,6 +195,8 @@ def get_chunks_for_all_methods(
                 "original_query": query_text,
                 "query_length": len(query_text),
                 "query_tokens": len(query_text.split()),
+                "embedding_dimension": embedding_dimension,
+                "embedding_preview": embedding_preview,
             },
             "retrieval_config": {
                 "top_k": k,
@@ -247,13 +253,15 @@ def analyze_ask_with_all_methods(
         }
 
     return {
+        "operation": "ask",
         "input": {
             "question": question,
             "model": model or "default",
-            "top_k": k
+            "top_k": k,
         },
         "retrieval_details": retrieval_data["retrieval_details"],
-        "results_by_method": results_by_method
+        "results_by_method": results_by_method,
+        "query_embedding": retrieval_data.get("query_embedding"),
     }
 
 
@@ -310,10 +318,11 @@ def analyze_compare_with_all_methods(
         "input": {
             "question": question,
             "models": models,
-            "top_k": k
+            "top_k": k,
         },
         "retrieval_details": retrieval_data["retrieval_details"],
-        "results_by_method": results_by_method
+        "results_by_method": results_by_method,
+        "query_embedding": retrieval_data.get("query_embedding"),
     }
 
 
@@ -349,10 +358,10 @@ def analyze_critique_with_all_methods(
                 {
                     "rank": c["rank"],
                     "doc_name": c["doc_name"],
-                    "text": c["text"], 
+                    "text": c["text"],
                     "text_preview": c["text"][:80] + "..." if len(c["text"]) > 80 else c["text"],
                     "score": c["primary_score"],
-                    "all_scores": c["all_scores"], 
+                    "all_scores": c["all_scores"],
                 }
                 for c in chunks
             ],
@@ -361,7 +370,7 @@ def analyze_critique_with_all_methods(
         }
 
     return {
-        "operation": "critique", 
+        "operation": "critique",
         "input": {
             "question": question,
             "answer_model": answer_model,
@@ -371,5 +380,5 @@ def analyze_critique_with_all_methods(
         },
         "retrieval_details": retrieval_data["retrieval_details"],
         "results_by_method": results_by_method,
+        "query_embedding": retrieval_data.get("query_embedding"),
     }
-

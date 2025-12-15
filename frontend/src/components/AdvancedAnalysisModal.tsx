@@ -186,6 +186,37 @@ export default function UnifiedAnalysisModal({
   const [pinnedKey, setPinnedKey] = useState<string | null>(null);
   const pinnedContainerRef = useRef<HTMLDivElement | null>(null);
   const pinnedBubbleRef = useRef<HTMLDivElement | null>(null);
+  const queryAnalysis = data.retrieval_details?.query_analysis || {};
+  const embeddingPreview: number[] | undefined = queryAnalysis.embedding_preview;
+  const embeddingDimension: number | undefined = queryAnalysis.embedding_dimension;
+  const fullEmbedding: number[] | undefined = data.query_embedding;
+  const [showFullEmbedding, setShowFullEmbedding] = useState(false);
+
+  const numericEmbedding =
+    showFullEmbedding && Array.isArray(fullEmbedding)
+      ? fullEmbedding
+      : embeddingPreview;
+
+  const handleExportJson = () => {
+    try {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vivbot-advanced-analysis-${data?.operation || "ask"
+        }.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export analysis JSON", err);
+    }
+  };
 
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
@@ -386,14 +417,24 @@ export default function UnifiedAnalysisModal({
                     </div>
                   </div>
 
-                  <button
-                    onClick={onClose}
-                    className="shrink-0 rounded-full p-2 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleExportJson}
+                      className="text-[10px] px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 transition"
+                    >
+                      Export JSON
+                    </button>
+
+                    <button
+                      onClick={onClose}
+                      className="rounded-full p-2 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-2">
@@ -483,6 +524,97 @@ export default function UnifiedAnalysisModal({
                         </div>
                       </div>
                     )}
+                    {embeddingPreview && embeddingPreview.length > 0 && (
+                      <div className="mt-3 bg-slate-900/60 border border-slate-700 rounded p-3">
+                        <div className="text-slate-400 mb-2 text-[11px] font-semibold">
+                          Query Embedding (Vector Representation)
+                        </div>
+
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] text-slate-500">
+                            Dimensions: {embeddingDimension ?? embeddingPreview.length}
+                          </span>
+                          <span className="text-[10px] text-slate-500">•</span>
+                          <span className="text-[10px] text-slate-500">
+                            First {embeddingPreview.length} values shown
+                          </span>
+                        </div>
+
+                        {(() => {
+                          const maxAbs = Math.max(
+                            ...embeddingPreview.map((v) => Math.abs(v))
+                          );
+                          const safeMaxAbs = Math.max(maxAbs, 1e-9);
+
+                          return (
+                            <div className="relative mb-2 overflow-x-auto">
+                              <div className="flex items-center gap-[2px] h-20 min-w-[360px] pr-2">
+                                {embeddingPreview.map((val, idx) => {
+                                  const isPositive = val >= 0;
+                                  const norm = Math.abs(val) / safeMaxAbs;
+                                  const height = Math.max(4, norm * 40);
+
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="relative group"
+                                      style={{ width: "9.5px", height: "100%" }}
+                                    >
+                                      <div
+                                        className={`absolute left-0 right-0 ${isPositive ? "bottom-1/2" : "top-1/2"
+                                          } ${isPositive ? "bg-emerald-500" : "bg-rose-500"}`}
+                                        style={{ height: `${height}px` }}
+                                      />
+                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[9px] whitespace-nowrap z-10">
+                                        [{idx}]: {val.toFixed(4)}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-[10px] text-slate-500">
+                            {showFullEmbedding && Array.isArray(fullEmbedding)
+                              ? `Showing all ${fullEmbedding.length} dimensions`
+                              : `Showing first ${embeddingPreview.length} of ${embeddingDimension} dimensions`}
+                          </div>
+                        </div>
+                        <div className="font-mono text-[9px] text-slate-400 bg-slate-950/50 rounded p-2 overflow-x-auto max-h-32 overflow-y-auto">
+                          [
+                          {(numericEmbedding ?? []).map((val, idx) => (
+                            <span key={idx}>
+                              <span className={val >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                                {val.toFixed(4)}
+                              </span>
+                              {idx < (numericEmbedding!.length - 1) && ", "}
+                            </span>
+                          ))}
+                          {showFullEmbedding ? "" : ", ..."}
+                          ]
+                        </div>
+                        {Array.isArray(fullEmbedding) &&
+                          fullEmbedding.length === (embeddingDimension ?? fullEmbedding.length) && (
+                            <div className="mt-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setShowFullEmbedding((prev) => !prev)}
+                                className="text-[10px] px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 transition"
+                              >
+                                {showFullEmbedding ? "Show first 100 values" : "Show all values"}
+                              </button>
+                            </div>
+                          )}
+                        <div className="mt-2 text-[10px] text-slate-500">
+                          This vector encodes your question in embedding space. Bars are
+                          scaled using the min/max of the first 100 values. Green = positive values,
+                          red = negative values. Use the toggle above to inspect all{" "}
+                          {embeddingDimension} dimensions for experiments.
+                        </div>
+                      </div>
+                    )}
                   </section>
 
                   <section className="bg-slate-950/60 border border-slate-800 rounded-lg p-4">
@@ -559,7 +691,10 @@ export default function UnifiedAnalysisModal({
                     <h3 className="text-sm font-bold text-amber-300 mb-3">
                       RESULTS BY SIMILARITY METHOD
                     </h3>
-
+                    <p className="text-[10px] text-slate-500 mb-2">
+                      Each chunk shows its score for the similarity metric. Cosine/Dot/Hybrid: higher = more
+                      similar. L1/L2 use negated distances, so higher = closer.
+                    </p>
                     <div className="space-y-4">
                       {METHODS.map((method) => {
                         const result = data.results_by_method?.[method];
@@ -624,26 +759,34 @@ export default function UnifiedAnalysisModal({
                                       key={i}
                                       ref={isPinned ? pinnedContainerRef : undefined}
                                       onClick={() =>
-                                        setPinnedKey((prev) =>
-                                          prev === key ? null : key
-                                        )
+                                        setPinnedKey((prev) => (prev === key ? null : key))
                                       }
-                                      className="relative group bg-slate-950/40 border border-slate-700 rounded p-2 cursor-pointer"
-                                      title="Hover to preview; click to pin"
+                                      className="relative bg-slate-950/40 border border-slate-700 rounded p-2 cursor-pointer"
+                                      title="Click to open full chunk"
                                     >
                                       <div className="flex items-center gap-2 mb-1">
-                                        <span
-                                          className={`text-[9px] font-bold ${styles.rankText}`}
-                                        >
+                                        <span className={`text-[9px] font-bold ${styles.rankText}`}>
                                           #{source.rank ?? i + 1}
                                         </span>
-                                        <span className="text-[8px] text-slate-500 truncate flex-1">
-                                          {source.doc_name ?? "—"}
+                                        <span className="text-[9px] text-slate-400 truncate">
+                                          {source.doc_name ?? "Unknown source"}
                                         </span>
                                       </div>
 
                                       <div className="text-[9px] text-slate-300 line-clamp-2 font-mono">
                                         {preview}
+                                      </div>
+
+                                      <div className="mt-1 text-[9px] text-slate-500">
+                                        {METHOD_INFO[method].name}{" "}
+                                        <span className="font-mono text-emerald-300">
+                                          {typeof source.score === "number"
+                                            ? source.score.toFixed(4)
+                                            : "—"}
+                                        </span>{" "}
+                                        {method === "neg_l1" || method === "neg_l2"
+                                          ? "(negated distance; higher = closer)"
+                                          : "(higher = more similar)"}
                                       </div>
 
                                       {full && (
