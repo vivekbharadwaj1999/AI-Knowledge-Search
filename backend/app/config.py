@@ -66,6 +66,7 @@ class LLMClient:
 def get_model_label(model_id: str) -> str:
     return GROQ_AVAILABLE_MODELS.get(model_id, model_id)
 
+
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
 
@@ -83,7 +84,7 @@ class EmbeddingClient:
             texts,
             show_progress_bar=False,
             convert_to_numpy=True,
-            normalize_embeddings=True,
+            normalize_embeddings=False,
         )
         return embeddings.tolist()
 
@@ -94,4 +95,3 @@ class EmbeddingClient:
         if not text:
             return []
         return self.embed([text])[0]
-

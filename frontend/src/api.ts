@@ -34,9 +34,16 @@ export type AutoInsights = {
   sentence_importance?: SentenceImportance[];
 };
 
-export async function uploadFile(file: File) {
+export async function uploadFile(
+  file: File,
+  chunk_size: number,
+  chunk_overlap: number
+) {
   const form = new FormData();
   form.append("file", file);
+  form.append("chunk_size", String(chunk_size));
+  form.append("chunk_overlap", String(chunk_overlap));
+
   const res = await axios.post(`${API_BASE}/ingest`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
@@ -53,13 +60,14 @@ export async function askQuestion(
   top_k = 5,
   docName?: string,
   model?: string,
-  similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid"
+  similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid",
+  normalizeVectors?: boolean
 ): Promise<AskResult> {
   const payload: any = { question, top_k };
   if (docName) payload.doc_name = docName;
   if (model) payload.model = model;
   if (similarity) payload.similarity = similarity;
-
+  if (normalizeVectors !== undefined) payload.normalize_vectors = normalizeVectors;
   const res = await axios.post(`${API_BASE}/ask`, payload);
   return res.data as AskResult;
 }
@@ -131,6 +139,7 @@ export type CrossDocRelations = {
 export async function fetchDocumentRelations(params?: {
   model?: string;
   similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
+  normalize_vectors?: boolean;
 }): Promise<CrossDocRelations> {
   const res = await axios.post(`${API_BASE}/document-relations`, params || {});
   return res.data as CrossDocRelations;
@@ -144,6 +153,7 @@ export async function runCritique(params: {
   doc_name?: string;
   self_correct?: boolean;
   similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
+  normalize_vectors?: boolean;
 }): Promise<CritiqueResult> {
   const res = await axios.post(`${API_BASE}/critique`, params);
   return res.data as CritiqueResult;
@@ -225,6 +235,7 @@ export async function analyzeOperation(params: {
   top_k?: number;
   doc_name?: string;
   max_rounds?: number;
+  normalize_vectors?: boolean;
 }): Promise<any> {
   const response = await fetch(`${API_BASE}/analyze`, {
     method: "POST",

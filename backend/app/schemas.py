@@ -8,6 +8,7 @@ class AskRequest(BaseModel):
     doc_name: Optional[str] = None
     model: Optional[str] = None
     similarity: Optional[str] = None
+    normalize_vectors: bool = True
 
 
 class SourceChunk(BaseModel):
@@ -109,6 +110,7 @@ class CrossDocRelations(BaseModel):
 class CrossDocRelationsRequest(BaseModel):
     model: Optional[str] = None
     similarity: Optional[str] = "cosine"
+    normalize_vectors: bool = True
 
 
 class CritiqueScores(BaseModel):
@@ -140,6 +142,7 @@ class CritiqueRequest(BaseModel):
     doc_name: Optional[str] = None
     self_correct: bool = False
     similarity: Optional[str] = "cosine"
+    normalize_vectors: bool = True
 
 
 class CritiqueResponse(BaseModel):
