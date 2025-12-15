@@ -215,6 +215,31 @@ export type CritiqueResult = {
   rounds: CritiqueRound[];
 };
 
+export async function analyzeOperation(params: {
+  operation: "ask" | "compare" | "critique";
+  question?: string;
+  model?: string;
+  models?: string[];
+  answer_model?: string;
+  critic_model?: string;
+  top_k?: number;
+  doc_name?: string;
+  max_rounds?: number;
+}): Promise<any> {
+  const response = await fetch(`${API_BASE}/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Analysis failed (${response.status}): ${text}`);
+  }
+  return response.json();
+}
+
+
 export async function resetCritiqueLog(): Promise<void> {
   const res = await fetch(`${API_BASE}/reset-critique-log`, {
     method: "POST",

@@ -170,7 +170,7 @@ export default function AskControls(props: AskControlsProps) {
           <textarea
             ref={askInputRef}
             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm
-                 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                 focus:outline-none focus:ring-2 focus:ring-sky-500"
             rows={2}
             placeholder="Ask something about the selected document..."
             value={question}
