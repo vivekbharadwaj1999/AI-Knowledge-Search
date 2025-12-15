@@ -177,7 +177,22 @@ def run_critique(
     self_correct: bool = False,
     similarity: Optional[str] = None,
     normalize_vectors: bool = True,
+    embedding_model: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """
+    Run critique on a question and answer.
+    
+    Args:
+        question: The question to critique
+        answer_model: Model to use for generating answers
+        critic_model: Model to use for critique
+        top_k: Number of chunks to retrieve
+        doc_name: Optional document name filter
+        self_correct: Whether to do multiple rounds
+        similarity: Similarity metric to use
+        normalize_vectors: Whether to normalize vectors
+        embedding_model: Embedding model to use for retrieval
+    """
     from app.qa import answer_question
     llm = LLMClient()
     critic = critic_model or GROQ_MODEL
@@ -204,6 +219,7 @@ def run_critique(
             model=answer_model,
             similarity=similarity,
             normalize_vectors=normalize_vectors,
+            embedding_model=embedding_model,
         )
 
         prompt = _build_critique_prompt(current_question, answer, context)
@@ -266,6 +282,7 @@ def run_critique(
             "doc_name": doc_name,
             "self_correct": self_correct,
             "similarity": similarity,
+            "embedding_model": embedding_model,
             "rounds": rounds,
         }
         os.makedirs("data", exist_ok=True)

@@ -1,6 +1,6 @@
 import re
 import os
-from typing import List
+from typing import List, Optional
 import pandas as pd
 from pypdf import PdfReader
 from docx import Document
@@ -142,7 +142,21 @@ def ingest_file(
     doc_name: str,
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
+    embedding_model: Optional[str] = None,
 ) -> int:
+    """
+    Ingest a file and store embeddings.
+    
+    Args:
+        file_path: Path to the file to ingest
+        doc_name: Name to store the document under
+        chunk_size: Size of text chunks
+        chunk_overlap: Overlap between chunks
+        embedding_model: Name of the embedding model to use (optional)
+    
+    Returns:
+        Number of chunks created
+    """
     if not os.path.exists(file_path):
         raise FileNotFoundError(file_path)
 
@@ -166,8 +180,15 @@ def ingest_file(
     if not chunks:
         return 0
 
-    embed_client = EmbeddingClient()
+    # Create embedding client with specified model (or use default)
+    try:
+        embed_client = EmbeddingClient(model_name=embedding_model)
+    except RuntimeError as e:
+        # Re-raise with more context
+        raise RuntimeError(f"Failed to initialize embedding model '{embedding_model}': {str(e)}")
+    
     embeddings = embed_client.embed_documents(chunks)
 
-    add_embeddings(chunks, embeddings, doc_name=doc_name)
+    # Store the embedding model name with the embeddings
+    add_embeddings(chunks, embeddings, doc_name=doc_name, embedding_model=embedding_model)
     return len(chunks)

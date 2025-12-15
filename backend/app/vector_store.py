@@ -21,7 +21,21 @@ def _ensure_dir():
     os.makedirs(os.path.dirname(VECTOR_STORE_PATH), exist_ok=True)
 
 
-def add_embeddings(texts: List[str], embeddings: List[List[float]], doc_name: str) -> None:
+def add_embeddings(
+    texts: List[str], 
+    embeddings: List[List[float]], 
+    doc_name: str,
+    embedding_model: Optional[str] = None
+) -> None:
+    """
+    Add embeddings to the vector store.
+    
+    Args:
+        texts: List of text chunks
+        embeddings: List of embedding vectors
+        doc_name: Name of the document
+        embedding_model: Name of the embedding model used (optional)
+    """
     _ensure_dir()
     with open(VECTOR_STORE_PATH, "a", encoding="utf-8") as f:
         for text, emb in zip(texts, embeddings):
@@ -30,6 +44,9 @@ def add_embeddings(texts: List[str], embeddings: List[List[float]], doc_name: st
                 "text": text,
                 "embedding": emb,
             }
+            # Store embedding model info if provided
+            if embedding_model:
+                rec["embedding_model"] = embedding_model
             f.write(json.dumps(rec) + "\n")
 
 
@@ -67,6 +84,18 @@ def get_latest_doc_name() -> Optional[str]:
     if last is None:
         return None
     return last.get("doc_name")
+
+
+def get_document_embedding_model(doc_name: str) -> Optional[str]:
+    """
+    Get the embedding model used for a specific document.
+    Returns the model name if found, otherwise None.
+    """
+    records = _load_records()
+    for rec in records:
+        if rec.get("doc_name") == doc_name:
+            return rec.get("embedding_model")
+    return None
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -124,6 +153,7 @@ def similarity_search(
       - "text": str
       - "embedding": List[float]
       - "score": float (similarity to the query)
+      - "embedding_model": str (optional)
 
     - If doc_name is None, search across ALL documents.
     - If doc_name is provided, restrict the search to that single document.
@@ -199,6 +229,31 @@ def list_documents() -> List[str]:
         if name:
             names.add(name)
     return sorted(names)
+
+
+def get_documents_info() -> List[Dict[str, Any]]:
+    """
+    Get information about all documents including their embedding models.
+    Returns a list of dicts with doc_name and embedding_model.
+    """
+    records = _load_records()
+    docs_info: Dict[str, Dict[str, Any]] = {}
+    
+    for rec in records:
+        doc_name = rec.get("doc_name")
+        if not doc_name:
+            continue
+        
+        if doc_name not in docs_info:
+            docs_info[doc_name] = {
+                "doc_name": doc_name,
+                "embedding_model": rec.get("embedding_model"),
+                "chunk_count": 0
+            }
+        
+        docs_info[doc_name]["chunk_count"] += 1
+    
+    return list(docs_info.values())
 
 
 def get_document_embeddings() -> Dict[str, List[float]]:

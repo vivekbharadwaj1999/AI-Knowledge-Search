@@ -22,7 +22,7 @@ from app.schemas import (
 from app.ingest import ingest_file, UPLOAD_DIR
 from app.qa import answer_question
 from app.vector_store import list_documents, clear_vector_store
-from app.config import GROQ_MODEL
+from app.config import GROQ_MODEL, AVAILABLE_EMBEDDING_MODELS, get_embedding_dimension
 from app.insights import generate_insights
 from app.report import generate_document_report
 from app.relations import analyze_cross_document_relations
@@ -55,11 +55,27 @@ def root():
     return {"status": "ok", "message": "AI Knowledge Search backend running"}
 
 
+@app.get("/embedding-models")
+async def get_embedding_models():
+    """Return available embedding models"""
+    models = []
+    for model_id, info in AVAILABLE_EMBEDDING_MODELS.items():
+        models.append({
+            "id": model_id,
+            "label": info["label"],
+            "type": info["type"],
+            "dimension": info["dimension"],
+            "description": info["description"]
+        })
+    return {"models": models}
+
+
 @app.post("/ingest")
 async def ingest_document(
     file: UploadFile = File(...),
     chunk_size: int = Form(800),
     chunk_overlap: int = Form(200),
+    embedding_model: str = Form("all-MiniLM-L6-v2"),
 ):
     allowed_exts = (".pdf", ".txt", ".csv", ".docx", ".pptx", ".xlsx")
     ext = os.path.splitext(file.filename)[1].lower()
@@ -69,30 +85,60 @@ async def ingest_document(
             status_code=400,
             detail="Unsupported file type. Allowed: PDF, TXT, CSV, DOCX, PPTX, XLSX.",
         )
+    
+    # Validate embedding model
+    if embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid embedding model. Choose from: {', '.join(AVAILABLE_EMBEDDING_MODELS.keys())}"
+        )
 
     file_path = os.path.join(UPLOAD_DIR, file.filename)
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    chunk_count = ingest_file(
-        file_path,
-        doc_name=file.filename,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-    )
+    try:
+        chunk_count = ingest_file(
+            file_path,
+            doc_name=file.filename,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            embedding_model=embedding_model,
+        )
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    
     if chunk_count == 0:
         raise HTTPException(
             status_code=400,
             detail="No readable text found in file",
         )
 
-    return {"status": "ok", "chunks_indexed": chunk_count}
+    embedding_dim = get_embedding_dimension(embedding_model)
+    
+    return {
+        "status": "ok",
+        "chunks_indexed": chunk_count,
+        "embedding_model": embedding_model,
+        "embedding_dimension": embedding_dim
+    }
 
 
 @app.post("/ask", response_model=AskResponse)
 async def ask_question_route(payload: AskRequest):
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    # Validate embedding model if provided
+    embedding_model = getattr(payload, 'embedding_model', None)
+    if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid embedding model: {embedding_model}"
+        )
 
     answer, chunks, sources = answer_question(
         payload.question,
@@ -101,6 +147,7 @@ async def ask_question_route(payload: AskRequest):
         model=payload.model,
         similarity=payload.similarity,
         normalize_vectors=payload.normalize_vectors,
+        embedding_model=embedding_model,
     )
 
     model_used = payload.model or GROQ_MODEL
@@ -265,10 +312,19 @@ def get_critique_log_rows():
 async def analyze_operation(payload: dict):
     operation = payload.get("operation", "").lower()
     normalize_vectors = bool(payload.get("normalize_vectors", True))
+    embedding_model = payload.get("embedding_model")
+    
     if operation not in ["ask", "compare", "critique"]:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid operation. Must be 'ask', 'compare', or 'critique'"
+        )
+    
+    # Validate embedding model if provided
+    if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid embedding model: {embedding_model}"
         )
 
     from app.qa import (
@@ -286,7 +342,8 @@ async def analyze_operation(payload: dict):
             question=question,
             k=payload.get("top_k", 7),
             doc_name=payload.get("doc_name"),
-            model=payload.get("model")
+            model=payload.get("model"),
+            embedding_model=embedding_model,
         )
 
     elif operation == "compare":
@@ -303,7 +360,8 @@ async def analyze_operation(payload: dict):
             question=question,
             models=models,
             k=payload.get("top_k", 7),
-            doc_name=payload.get("doc_name")
+            doc_name=payload.get("doc_name"),
+            embedding_model=embedding_model,
         )
 
     elif operation == "critique":
@@ -329,6 +387,7 @@ async def analyze_operation(payload: dict):
             k=payload.get("top_k", 7),
             doc_name=payload.get("doc_name"),
             self_correct=self_correct,
+            embedding_model=embedding_model,
         )
 
     return {

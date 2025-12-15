@@ -1,7 +1,7 @@
 import math
 from typing import List, Optional, Dict, Any
 from app.config import EmbeddingClient, LLMClient
-from app.vector_store import similarity_search, _load_records
+from app.vector_store import similarity_search, _load_records, get_document_embedding_model
 from app.critique import run_critique
 
 
@@ -35,8 +35,27 @@ def answer_question(
     model: Optional[str] = None,
     similarity: Optional[str] = None,
     normalize_vectors: bool = True,
+    embedding_model: Optional[str] = None,
 ):
-    embed_client = EmbeddingClient()
+    """
+    Answer a question using the vector store.
+    
+    Args:
+        question: The question to answer
+        k: Number of top chunks to retrieve
+        doc_name: Optional document name to filter by
+        model: LLM model to use for answering
+        similarity: Similarity metric to use
+        normalize_vectors: Whether to normalize vectors
+        embedding_model: Embedding model to use. If None and doc_name is provided,
+                        uses the model that was used to embed that document.
+    """
+    # Determine which embedding model to use
+    if embedding_model is None and doc_name is not None:
+        # Try to get the embedding model used for this document
+        embedding_model = get_document_embedding_model(doc_name)
+    
+    embed_client = EmbeddingClient(model_name=embedding_model)
     query_embedding = embed_client.embed_query(question)
 
     records = similarity_search(
@@ -134,12 +153,28 @@ def get_chunks_for_all_methods(
     k: int = 7,
     doc_name: Optional[str] = None,
     normalize_vectors: bool = True,
+    embedding_model: Optional[str] = None,
 ) -> Dict[str, Any]:
-    embed_client = EmbeddingClient()
+    """
+    Get chunks using all similarity methods.
+    
+    Args:
+        query_text: The query text
+        k: Number of top chunks to retrieve
+        doc_name: Optional document name to filter by
+        normalize_vectors: Whether to normalize vectors
+        embedding_model: Embedding model to use. If None and doc_name is provided,
+                        uses the model that was used to embed that document.
+    """
+    # Determine which embedding model to use
+    if embedding_model is None and doc_name is not None:
+        embedding_model = get_document_embedding_model(doc_name)
+    
+    embed_client = EmbeddingClient(model_name=embedding_model)
     query_embedding = embed_client.embed_query(query_text)
     embedding_dimension = len(query_embedding)
-    embedding_preview = query_embedding[:100] if embedding_dimension > 0 else [
-    ]
+    embedding_preview = query_embedding[:100] if embedding_dimension > 0 else []
+    
     all_records = _load_records()
 
     if not all_records:
@@ -220,6 +255,7 @@ def get_chunks_for_all_methods(
                 "query_tokens": len(query_text.split()),
                 "embedding_dimension": embedding_dimension,
                 "embedding_preview": embedding_preview,
+                "embedding_model": embedding_model,
             },
             "retrieval_config": {
                 "top_k": k,
@@ -238,9 +274,11 @@ def analyze_ask_with_all_methods(
     doc_name: Optional[str] = None,
     model: Optional[str] = None,
     normalize_vectors: bool = True,
+    embedding_model: Optional[str] = None,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
-        question, k, doc_name, normalize_vectors=normalize_vectors
+        question, k, doc_name, normalize_vectors=normalize_vectors,
+        embedding_model=embedding_model
     )
     if "error" in retrieval_data:
         return retrieval_data
@@ -284,6 +322,7 @@ def analyze_ask_with_all_methods(
             "question": question,
             "model": model or "default",
             "top_k": k,
+            "embedding_model": embedding_model,
         },
         "retrieval_details": retrieval_data["retrieval_details"],
         "results_by_method": results_by_method,
@@ -297,9 +336,11 @@ def analyze_compare_with_all_methods(
     k: int = 7,
     doc_name: Optional[str] = None,
     normalize_vectors: bool = True,
+    embedding_model: Optional[str] = None,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
-        question, k, doc_name, normalize_vectors=normalize_vectors
+        question, k, doc_name, normalize_vectors=normalize_vectors,
+        embedding_model=embedding_model
     )
     if "error" in retrieval_data:
         return retrieval_data
@@ -348,6 +389,7 @@ def analyze_compare_with_all_methods(
             "question": question,
             "models": models,
             "top_k": k,
+            "embedding_model": embedding_model,
         },
         "retrieval_details": retrieval_data["retrieval_details"],
         "results_by_method": results_by_method,
@@ -363,9 +405,11 @@ def analyze_critique_with_all_methods(
     doc_name: Optional[str] = None,
     self_correct: bool = True,
     normalize_vectors: bool = True,
+    embedding_model: Optional[str] = None,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
-        question, k, doc_name, normalize_vectors=normalize_vectors
+        question, k, doc_name, normalize_vectors=normalize_vectors,
+        embedding_model=embedding_model
     )
     if "error" in retrieval_data:
         return retrieval_data
@@ -381,6 +425,7 @@ def analyze_critique_with_all_methods(
             doc_name=doc_name,
             self_correct=self_correct,
             similarity=method,
+            embedding_model=embedding_model,
         )
 
         chunks = retrieval_data["top_k_by_method"][method]
@@ -409,6 +454,7 @@ def analyze_critique_with_all_methods(
             "critic_model": critic_model,
             "top_k": k,
             "self_correct": self_correct,
+            "embedding_model": embedding_model,
         },
         "retrieval_details": retrieval_data["retrieval_details"],
         "results_by_method": results_by_method,
