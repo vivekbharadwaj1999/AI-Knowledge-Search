@@ -9,6 +9,7 @@ class AskRequest(BaseModel):
     model: Optional[str] = None
     similarity: Optional[str] = None
     normalize_vectors: bool = True
+    embedding_model: Optional[str] = None
 
 
 class SourceChunk(BaseModel):
@@ -143,6 +144,7 @@ class CritiqueRequest(BaseModel):
     self_correct: bool = False
     similarity: Optional[str] = "cosine"
     normalize_vectors: bool = True
+    embedding_model: Optional[str] = None
 
 
 class CritiqueResponse(BaseModel):

@@ -12,7 +12,7 @@ export type AskResult = {
 
 export type SentenceImportance = {
   sentence: string;
-  score: number; // 0–5
+  score: number;
 };
 
 export type SourceChunk = {
@@ -34,20 +34,42 @@ export type AutoInsights = {
   sentence_importance?: SentenceImportance[];
 };
 
+export type EmbeddingModel = {
+  id: string;
+  label: string;
+  type: "local" | "openai";
+  dimension: number;
+  description: string;
+};
+
+export async function fetchEmbeddingModels(): Promise<EmbeddingModel[]> {
+  const res = await axios.get(`${API_BASE}/embedding-models`);
+  return res.data.models as EmbeddingModel[];
+}
+
 export async function uploadFile(
   file: File,
   chunk_size: number,
-  chunk_overlap: number
+  chunk_overlap: number,
+  embedding_model?: string 
 ) {
   const form = new FormData();
   form.append("file", file);
   form.append("chunk_size", String(chunk_size));
   form.append("chunk_overlap", String(chunk_overlap));
+  if (embedding_model) {
+    form.append("embedding_model", embedding_model);
+  }
 
   const res = await axios.post(`${API_BASE}/ingest`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return res.data as { status: string; chunks_indexed: number };
+  return res.data as { 
+    status: string; 
+    chunks_indexed: number;
+    embedding_model?: string;  
+    embedding_dimension?: number;
+  };
 }
 
 export async function fetchDocuments() {
@@ -61,13 +83,15 @@ export async function askQuestion(
   docName?: string,
   model?: string,
   similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid",
-  normalizeVectors?: boolean
+  normalizeVectors?: boolean,
+  embeddingModel?: string 
 ): Promise<AskResult> {
   const payload: any = { question, top_k };
   if (docName) payload.doc_name = docName;
   if (model) payload.model = model;
   if (similarity) payload.similarity = similarity;
   if (normalizeVectors !== undefined) payload.normalize_vectors = normalizeVectors;
+  if (embeddingModel) payload.embedding_model = embeddingModel; 
   const res = await axios.post(`${API_BASE}/ask`, payload);
   return res.data as AskResult;
 }
@@ -154,6 +178,7 @@ export async function runCritique(params: {
   self_correct?: boolean;
   similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
   normalize_vectors?: boolean;
+  embedding_model?: string;  
 }): Promise<CritiqueResult> {
   const res = await axios.post(`${API_BASE}/critique`, params);
   return res.data as CritiqueResult;
@@ -236,6 +261,7 @@ export async function analyzeOperation(params: {
   doc_name?: string;
   max_rounds?: number;
   normalize_vectors?: boolean;
+  embedding_model?: string;  
 }): Promise<any> {
   const response = await fetch(`${API_BASE}/analyze`, {
     method: "POST",
@@ -259,4 +285,3 @@ export async function resetCritiqueLog(): Promise<void> {
     throw new Error("Failed to reset critique log");
   }
 }
-

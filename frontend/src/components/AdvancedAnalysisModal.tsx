@@ -189,6 +189,7 @@ export default function UnifiedAnalysisModal({
   const queryAnalysis = data.retrieval_details?.query_analysis || {};
   const embeddingPreview: number[] | undefined = queryAnalysis.embedding_preview;
   const embeddingDimension: number | undefined = queryAnalysis.embedding_dimension;
+  const embeddingModel: string | undefined = queryAnalysis.embedding_model;
   const fullEmbedding: number[] | undefined = data.query_embedding;
   const [showFullEmbedding, setShowFullEmbedding] = useState(false);
 
@@ -530,7 +531,15 @@ export default function UnifiedAnalysisModal({
                           Query Embedding (Vector Representation)
                         </div>
 
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {embeddingModel && (
+                            <>
+                              <span className="text-[10px] text-sky-400 font-medium">
+                                Model: {embeddingModel}
+                              </span>
+                              <span className="text-[10px] text-slate-500">•</span>
+                            </>
+                          )}
                           <span className="text-[10px] text-slate-500">
                             Dimensions: {embeddingDimension ?? embeddingPreview.length}
                           </span>
@@ -539,7 +548,6 @@ export default function UnifiedAnalysisModal({
                             First {embeddingPreview.length} values shown
                           </span>
                         </div>
-
                         {(() => {
                           const maxAbs = Math.max(
                             ...embeddingPreview.map((v) => Math.abs(v))
@@ -608,8 +616,8 @@ export default function UnifiedAnalysisModal({
                             </div>
                           )}
                         <div className="mt-2 text-[10px] text-slate-500">
-                          This vector encodes your question in embedding space. Bars are
-                          scaled using the min/max of the first 100 values. Green = positive values,
+                          This vector encodes your question in embedding space{embeddingModel && ` using ${embeddingModel}`}.
+                          Bars are scaled using the min/max of the first 100 values. Green = positive values,
                           red = negative values. Use the toggle above to inspect all{" "}
                           {embeddingDimension} dimensions for experiments.
                         </div>
