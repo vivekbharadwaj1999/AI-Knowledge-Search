@@ -30,7 +30,7 @@ const steps: Step[] = [
       "Start by uploading a document in section 1: “Upload & index a document”. Supported formats include PDF, TXT, CSV, DOCX, XLSX, and PPTX.",
     points: [
       "Click “Choose File” and pick a document from your computer.",
-      "Adjust **Chunk size** to control how documents are split before indexing. Smaller chunks give finer grained retrieval, larger chunks preserve more context. Changing chunk size requires reuploading the document.",
+      "Adjust **Chunk size** to control how documents are split before indexing. Smaller chunks give finer grained retrieval, larger chunks preserve more context. Set **Chunk overlap** to repeat part of the previous chunk to preserve context across boundaries. Changing either setting requires reuploading the document.",
       "Press “Upload & Index” to chunk the file and create vector embeddings.",
       "Once indexed, the document appears in the dropdown used by the later sections.",
     ],
