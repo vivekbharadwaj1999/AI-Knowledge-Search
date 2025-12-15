@@ -5,6 +5,7 @@ import ReportPanel from "./components/ReportPanel";
 import ReactMarkdown from "react-markdown";
 import logo from "./assets/logo.webp";
 import InstructionsModal from "./components/InstructionsModal";
+import UnifiedAnalysisModal from "./components/AdvancedAnalysisModal";
 
 import {
   fetchDocuments,
@@ -20,6 +21,7 @@ import {
   type CritiqueRound,
   fetchCritiqueLogRows,
   resetCritiqueLog,
+  analyzeOperation,
 } from "./api";
 
 
@@ -301,6 +303,13 @@ export type Message = {
   id: number;
   question: string;
   answer: string;
+  operation?: "ask" | "compare" | "critique";
+  topK?: number;
+  docName?: string;
+  similarity?: string;
+  models?: string[];
+  prompt?: string;
+  maxRounds?: number;
   context: string[];
   modelUsed?: string;
   sources?: SourceChunk[];
@@ -679,6 +688,11 @@ function App() {
     "operations"
   );
 
+  // Analysis modal state
+  const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
+  const [analysisModalData, setAnalysisModalData] = useState<any>(null);
+  const [analysisLoading, setAnalysisLoading] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     async function checkExistingLogs() {
       try {
@@ -806,6 +820,10 @@ function App() {
         answer: res.answer,
         context: res.context,
         modelUsed: res.model_used || modelId,
+        operation: "ask",
+        topK: topK,
+        docName: selectedDoc || undefined,
+        similarity: similarityMetric || "cosine",
         sources: (res.sources || []) as SourceChunk[],
       };
 
@@ -1068,6 +1086,108 @@ function App() {
       setRelationsLoading(false);
     }
   };
+
+  const handleAdvancedAnalysis = async (msgId: number) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg || !msg.operation) return;
+
+    setAnalysisLoading(prev => ({ ...prev, [msgId]: true }));
+
+    try {
+      let params: any = {
+        operation: msg.operation,
+        top_k: msg.topK || 7,
+        doc_name: msg.docName || undefined,
+      };
+
+      if (msg.operation === "ask") {
+        params.question = msg.question;
+        params.model = msg.modelUsed;
+      } else if (msg.operation === "compare") {
+        params.question = msg.question;
+        params.models = msg.models;
+      } else if (msg.operation === "critique") {
+        params.prompt = msg.prompt;
+        params.max_rounds = msg.maxRounds || 2;
+      }
+
+      const result = await analyzeOperation(params);
+
+      setAnalysisModalData({
+        ...result,
+        selectedMethod: msg.similarity || "cosine",
+      });
+      setAnalysisModalOpen(true);
+    } catch (error) {
+      console.error("Analysis failed:", error);
+      alert("Failed to run advanced analysis. Please try again.");
+    } finally {
+      setAnalysisLoading(prev => ({ ...prev, [msgId]: false }));
+    }
+  };
+
+  const handleAdvancedAnalysisCompare = async (comparisonId: number) => {
+    const cmp = comparisons.find(c => c.id === comparisonId);
+    if (!cmp) return;
+
+    setAnalysisLoading(prev => ({ ...prev, ["cmp_" + comparisonId]: true }));
+
+    try {
+      const params = {
+        operation: "compare" as const,
+        question: cmp.question,
+        models: [cmp.left.model, cmp.right.model],
+        top_k: topK,
+        doc_name: useAllDocs ? undefined : selectedDoc,
+      };
+
+      const result = await analyzeOperation(params);
+
+      setAnalysisModalData({
+        ...result,
+        selectedMethod: similarityMetric || "cosine",
+      });
+      setAnalysisModalOpen(true);
+    } catch (error) {
+      console.error("Compare analysis failed:", error);
+      alert("Failed to run advanced analysis. Please try again.");
+    } finally {
+      setAnalysisLoading(prev => ({ ...prev, ["cmp_" + comparisonId]: false }));
+    }
+  };
+
+  const handleAdvancedAnalysisCritique = async (critiqueId: number) => {
+    const crt = critiques.find(c => c.id === critiqueId);
+    if (!crt) return;
+
+    setAnalysisLoading(prev => ({ ...prev, ["crt_" + critiqueId]: true }));
+
+    try {
+      const params = {
+        operation: "critique" as const,
+        question: crt.question,
+        answer_model: crt.answer_model,
+        critic_model: crt.critic_model,
+        top_k: topK,
+        doc_name: useAllDocs ? undefined : selectedDoc,
+        max_rounds: crt.rounds?.length ?? 1,
+      };
+
+      const result = await analyzeOperation(params);
+
+      setAnalysisModalData({
+        ...result,
+        selectedMethod: similarityMetric || "cosine",
+      });
+      setAnalysisModalOpen(true);
+    } catch (error) {
+      console.error("Critique analysis failed:", error);
+      alert("Failed to run advanced analysis. Please try again.");
+    } finally {
+      setAnalysisLoading(prev => ({ ...prev, ["crt_" + critiqueId]: false }));
+    }
+  };
+
   return (
     <div className="flex flex-col bg-slate-950 text-slate-100 min-h-screen overflow-hidden">
       <header className="shrink-0 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
@@ -1488,7 +1608,29 @@ function App() {
                           </span>
                           {msg.modelUsed && <span>Model: {msg.modelUsed}</span>}
                         </div>
-
+                        <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleAdvancedAnalysis(msg.id)}
+                          disabled={analysisLoading[msg.id]}
+                          className="inline-flex items-center gap-1 rounded-md border border-sky-500/70 bg-sky-600 hover:bg-sky-500 px-2 py-1 text-[11px] text-white disabled:opacity-50 transition"
+                          title="Compare all 5 similarity methods"
+                        >
+                          {analysisLoading[msg.id] ? (
+                            <>
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>Analyzing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Advanced Analysis</span>
+                            </>
+                          )}
+                        </button>
+                        </div>
                         <div className="mt-1">
                           <div className="text-[11px] text-sky-300">
                             Question
@@ -1763,6 +1905,22 @@ function App() {
                             {cmp.left.model} vs {cmp.right.model}
                           </span>
                         </div>
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleAdvancedAnalysisCompare(cmp.id)}
+                            disabled={analysisLoading["cmp_" + cmp.id]}
+                            className="inline-flex items-center gap-1 rounded-md border border-sky-500/70 bg-sky-600 hover:bg-sky-500 px-2 py-1 text-[11px] text-white disabled:opacity-50 transition"
+                          >
+                            {analysisLoading["cmp_" + cmp.id] ? <>
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>Analyzing...</span>
+                            </> : "Advanced Analysis"}
+                          </button>
+                        </div>
 
                         <div>
                           <div className="text-[11px] text-sky-300">
@@ -1815,7 +1973,22 @@ function App() {
                             {crt.answer_model} (answer) · {crt.critic_model} (critic)
                           </span>
                         </div>
-
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleAdvancedAnalysisCritique(crt.id)}
+                            disabled={analysisLoading["crt_" + crt.id]}
+                            className="inline-flex items-center gap-1 rounded-md border border-sky-500/70 bg-sky-600 hover:bg-sky-500 px-2 py-1 text-[11px] text-white disabled:opacity-50 transition"
+                          >
+                            {analysisLoading["crt_" + crt.id] ? <>
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>Analyzing...</span>
+                            </> : "Advanced Analysis"}
+                          </button>
+                        </div>
                         <div>
                           <div className="text-[11px] text-sky-300">Question</div>
                           <div className="text-xs sm:text-[13px] text-slate-100 leading-relaxed">
@@ -2083,9 +2256,20 @@ function App() {
           )}
         </div>
       </div>
+
       <InstructionsModal
         open={showInstructions}
         onClose={() => setShowInstructions(false)}
+      />
+
+      <UnifiedAnalysisModal
+        isOpen={analysisModalOpen}
+        onClose={() => {
+          setAnalysisModalOpen(false);
+          setAnalysisModalData(null);
+        }}
+        data={analysisModalData}
+        selectedMethod={analysisModalData?.selectedMethod}
       />
     </div>
   );

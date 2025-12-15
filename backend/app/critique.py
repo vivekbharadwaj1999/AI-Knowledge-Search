@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from app.config import LLMClient, GROQ_MODEL
-from app.qa import answer_question
 
 PROMPT_ISSUE_TAGS = [
     "missing_context",
@@ -178,12 +177,7 @@ def run_critique(
     self_correct: bool = False,
     similarity: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    1) Use the QA pipeline with `answer_model` to answer the question.
-    2) Use `critic_model` (or default GROQ_MODEL) to critique the answer + prompt.
-    3) If self_correct=True, run up to two critique-&-repair rounds.
-    """
-
+    from app.qa import answer_question
     llm = LLMClient()
     critic = critic_model or GROQ_MODEL
 
