@@ -178,6 +178,7 @@ def run_critique(
     similarity: Optional[str] = None,
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
+    temperature: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Run critique on a question and answer.
@@ -192,6 +193,7 @@ def run_critique(
         similarity: Similarity metric to use
         normalize_vectors: Whether to normalize vectors
         embedding_model: Embedding model to use for retrieval
+        temperature: Temperature for LLM generation
     """
     from app.qa import answer_question
     llm = LLMClient()
@@ -220,10 +222,11 @@ def run_critique(
             similarity=similarity,
             normalize_vectors=normalize_vectors,
             embedding_model=embedding_model,
+            temperature=temperature,
         )
 
         prompt = _build_critique_prompt(current_question, answer, context)
-        raw = llm.complete(prompt, model=critic)
+        raw = llm.complete(prompt, model=critic, temperature=temperature)
 
         parsed = _safe_json_parse(raw) or {}
         answer_critique = _safe_str(parsed.get(

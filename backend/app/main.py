@@ -313,6 +313,9 @@ async def analyze_operation(payload: dict):
     operation = payload.get("operation", "").lower()
     normalize_vectors = bool(payload.get("normalize_vectors", True))
     embedding_model = payload.get("embedding_model")
+    temperature = payload.get("temperature")
+    if temperature is not None:
+        temperature = float(temperature)
     
     if operation not in ["ask", "compare", "critique"]:
         raise HTTPException(
@@ -344,6 +347,7 @@ async def analyze_operation(payload: dict):
             doc_name=payload.get("doc_name"),
             model=payload.get("model"),
             embedding_model=embedding_model,
+            temperature=temperature,
         )
 
     elif operation == "compare":
@@ -362,6 +366,7 @@ async def analyze_operation(payload: dict):
             k=payload.get("top_k", 7),
             doc_name=payload.get("doc_name"),
             embedding_model=embedding_model,
+            temperature=temperature,
         )
 
     elif operation == "critique":
@@ -388,6 +393,7 @@ async def analyze_operation(payload: dict):
             doc_name=payload.get("doc_name"),
             self_correct=self_correct,
             embedding_model=embedding_model,
+            temperature=temperature,
         )
 
     return {

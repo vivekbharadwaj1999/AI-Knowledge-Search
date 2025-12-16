@@ -129,15 +129,18 @@ const steps: Step[] = [
       "The output also shows the differences in the correctness, hallucinations, and similarity of the answer from both rounds.",
     ],
   },
-  {
+{
     id: "advanced",
     navLabel: "Advanced analysis",
     title: "8. Advanced analysis",
     description:
-      "Advanced analysis runs a deeper, structured breakdown of an existing Ask / Compare / Critique result using the same scope, Top K, and normalization but with every similarity function.",
+      "Advanced analysis runs a deeper, structured breakdown of an existing Ask / Compare / Critique result using the same scope, Top K, and normalization but with every similarity function. It includes Answer Stability analysis to measure how retrieval methods affect outputs.",
     points: [
       "After you run **Ask**, **Compare**, or **Critique**, use the **Advanced analysis** button on that output card.",
-      "This generates an additional analysis card that helps you inspect the result more deeply (useful for research / evaluation).",
+      "This generates an additional analysis that helps you inspect the result more deeply (useful for research / evaluation).",
+      "**Answer Stability (Experimental)**: Shows how consistent answers are across different retrieval methods using semantic (embedding cosine) and lexical (ROUGE-L) similarity.",
+      "**Temperature Control**: Adjust temperature (0-2) and click 'Recompute' to explore how LLM sampling affects answer stability. Each experiment is saved to history.",
+      "**Export JSON**: Includes complete history of all advanced analysis information for research analysis.",
       "If your retrieval settings change (scope / Top K / normalization), rerun the operation to analyze the new grounding context.",
     ],
   },
