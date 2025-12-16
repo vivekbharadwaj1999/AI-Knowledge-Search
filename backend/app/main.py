@@ -201,6 +201,8 @@ async def document_relations_route(payload: CrossDocRelationsRequest):
     try:
         result = analyze_cross_document_relations(
             model=payload.model,
+            max_pairs=payload.max_pairs,
+            min_similarity=payload.min_similarity,
             similarity=payload.similarity,
             normalize_vectors=payload.normalize_vectors,
         )
