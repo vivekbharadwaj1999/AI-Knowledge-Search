@@ -14,6 +14,15 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const handleClose = () => {
+    setIsLogin(true);  
+    setUsername("");
+    setPassword("");
+    setError("");
+    setLoading(false);
+    onClose();
+  };
+
   if (!open) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,14 +31,12 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
     setLoading(true);
 
     try {
-      const data = isLogin 
+      const data = isLogin
         ? await login(username, password)
         : await signup(username, password);
-      
+
       onSuccess(data.token, data.username, data.is_guest);
-      onClose();
-      setUsername("");
-      setPassword("");
+      handleClose();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || "Authentication failed");
     } finally {
@@ -40,14 +47,14 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
+      onClick={handleClose} 
     >
       <div
         className="relative bg-slate-900 border border-slate-700 rounded-lg shadow-xl max-w-md w-full p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute top-3 right-3 text-slate-400 hover:text-slate-200"
         >
           ✕
@@ -57,12 +64,17 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
           {isLogin ? "Login" : "Sign Up"}
         </h2>
         <p className="text-sm text-slate-400 mb-4">
-          {isLogin ? "Login to access your saved documents" : "Create an account to save your documents permanently"}
+          {isLogin
+            ? "Login to access your saved documents"
+            : "Create an account to save your documents permanently"}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-slate-300 mb-1">
+            <label
+              htmlFor="username"
+              className="block text-sm font-medium text-slate-300 mb-1"
+            >
               Username
             </label>
             <input
@@ -77,8 +89,14 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-1">
-              Password {!isLogin && <span className="text-slate-500">(min. 8 characters)</span>}
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-slate-300 mb-1"
+            >
+              Password{" "}
+              {!isLogin && (
+                <span className="text-slate-500">(min. 8 characters)</span>
+              )}
             </label>
             <input
               id="password"
@@ -115,7 +133,9 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
               }}
               className="text-sm text-sky-400 hover:text-sky-300"
             >
-              {isLogin ? "Don't have an account? Sign up" : "Already have an account? Login"}
+              {isLogin
+                ? "Don't have an account? Sign up"
+                : "Already have an account? Login"}
             </button>
           </div>
         </form>
