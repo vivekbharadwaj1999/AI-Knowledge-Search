@@ -51,8 +51,8 @@ app = FastAPI(title="AI Knowledge Search Engine")
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
-    "http://46.224.82.38",  
-    "http://46.224.82.38:5173", 
+    "http://46.224.82.38",
+    "http://46.224.82.38:5173",
 ]
 
 app.add_middleware(
@@ -65,10 +65,7 @@ app.add_middleware(
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
-# Optional authentication - returns user info or None
 async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict]:
-    """Extract and validate JWT token from Authorization header, returns None if not authenticated"""
     if not authorization:
         return None
     
@@ -79,16 +76,12 @@ async def get_current_user_optional(authorization: Optional[str] = Header(None))
     user_data = decode_token(token)
     return user_data
 
-
 @app.get("/")
 def root():
     return {"status": "ok", "message": "AI Knowledge Search backend running"}
 
-
-# Authentication endpoints
 @app.post("/auth/signup", response_model=AuthResponse)
 async def signup(payload: SignupRequest):
-    """Create a new user account"""
     try:
         success = create_user(payload.username, payload.password)
         if not success:
@@ -99,67 +92,48 @@ async def signup(payload: SignupRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.post("/auth/login", response_model=AuthResponse)
 async def login(payload: LoginRequest):
-    """Login with username and password"""
     token = authenticate_user(payload.username, payload.password)
     if not token:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     
     return AuthResponse(token=token, username=payload.username, is_guest=False)
 
-
 @app.post("/auth/guest", response_model=AuthResponse)
 async def create_guest():
-    """Create a guest session"""
     token = create_guest_session()
-    # Extract guest_id from token
     user_data = decode_token(token)
     return AuthResponse(token=token, username=user_data["username"], is_guest=True)
 
-
 @app.get("/auth/me", response_model=UserResponse)
 async def get_current_user_info(authorization: Optional[str] = Header(None)):
-    """Get current user information"""
     user_data = await get_current_user_optional(authorization)
     if user_data:
         return UserResponse(username=user_data["username"], is_guest=user_data["is_guest"])
     
     raise HTTPException(status_code=401, detail="Not authenticated")
 
-
 @app.post("/auth/logout")
 async def logout(authorization: Optional[str] = Header(None)):
-    """Logout and cleanup guest data if applicable"""
     user_data = await get_current_user_optional(authorization)
     if user_data and user_data.get("is_guest"):
-        # Cleanup guest data
         cleanup_guest_data(user_data["username"])
     
     return {"status": "ok", "message": "Logged out"}
 
-
 @app.delete("/auth/account")
 async def delete_account(authorization: Optional[str] = Header(None)):
-    """
-    Delete user account permanently
-    - Removes credentials from users.json
-    - Deletes all user files (uploads, vector store, logs)
-    - Only works for logged-in users (not guests)
-    """
     user_data = await get_current_user_optional(authorization)
     
     if not user_data:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Guests can't delete accounts (they have no permanent account)
     if user_data.get("is_guest"):
         raise HTTPException(status_code=400, detail="Guest users cannot delete accounts")
     
     username = user_data["username"]
     
-    # Delete the account
     success = delete_user_account(username)
     
     if not success:
@@ -167,10 +141,8 @@ async def delete_account(authorization: Optional[str] = Header(None)):
     
     return {"status": "ok", "message": f"Account '{username}' deleted successfully"}
 
-
 @app.get("/embedding-models")
 async def get_embedding_models():
-    """Return available embedding models"""
     models = []
     for model_id, info in AVAILABLE_EMBEDDING_MODELS.items():
         models.append({
@@ -182,7 +154,6 @@ async def get_embedding_models():
         })
     return {"models": models}
 
-
 @app.post("/ingest")
 async def ingest_document(
     file: UploadFile = File(...),
@@ -191,7 +162,6 @@ async def ingest_document(
     embedding_model: str = Form("all-MiniLM-L6-v2"),
     authorization: Optional[str] = Header(None),
 ):
-    # Get user info (guest or logged-in)
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
@@ -205,14 +175,12 @@ async def ingest_document(
             detail="Unsupported file type. Allowed: PDF, TXT, CSV, DOCX, PPTX, XLSX.",
         )
     
-    # Validate embedding model
     if embedding_model not in AVAILABLE_EMBEDDING_MODELS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid embedding model. Choose from: {', '.join(AVAILABLE_EMBEDDING_MODELS.keys())}"
         )
 
-    # Use user/guest-specific upload directory
     user_upload_dir = get_user_upload_dir(username, is_guest)
     os.makedirs(user_upload_dir, exist_ok=True)
     
@@ -252,10 +220,8 @@ async def ingest_document(
         "is_guest": is_guest
     }
 
-
 @app.post("/ask", response_model=AskResponse)
 async def ask_question_route(payload: AskRequest, authorization: Optional[str] = Header(None)):
-    # Get user info (guest or logged-in)
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
@@ -263,7 +229,6 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    # Validate embedding model if provided
     embedding_model = getattr(payload, 'embedding_model', None)
     if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
         raise HTTPException(
@@ -292,7 +257,6 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
         sources=sources,
     )
 
-
 @app.post("/insights", response_model=InsightsResponse)
 async def insights_route(payload: InsightsRequest):
     if not payload.answer.strip():
@@ -306,14 +270,12 @@ async def insights_route(payload: InsightsRequest):
     )
     return InsightsResponse(**data)
 
-
 @app.get("/documents")
 async def get_documents(authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
     return {"documents": list_documents(username, is_guest)}
-
 
 @app.post("/report", response_model=DocumentReport)
 async def create_report(req: ReportRequest, authorization: Optional[str] = Header(None)):
@@ -338,7 +300,6 @@ async def create_report(req: ReportRequest, authorization: Optional[str] = Heade
         raise HTTPException(
             status_code=500, detail="Failed to generate document report"
         )
-
 
 @app.post("/document-relations", response_model=CrossDocRelations)
 async def document_relations_route(payload: CrossDocRelationsRequest, authorization: Optional[str] = Header(None)):
@@ -365,7 +326,6 @@ async def document_relations_route(payload: CrossDocRelationsRequest, authorizat
             detail="Failed to analyze document relations",
         )
 
-
 @app.post("/critique", response_model=CritiqueResponse)
 async def critique_route(payload: CritiqueRequest, authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
@@ -389,16 +349,8 @@ async def critique_route(payload: CritiqueRequest, authorization: Optional[str] 
     )
     return data
 
-
-# LOG_PATH now handled per-user
-
-
 @app.get("/critique-log-rows", response_model=CritiqueLogResponse)
 async def get_critique_log_rows(authorization: Optional[str] = Header(None)):
-    """
-    Return one row per critique run for frontend export.
-    Reads data/critique_log.jsonl written by run_critique().
-    """
     user_info = await get_current_user_optional(authorization)
     if user_info:
         username, is_guest = user_info["username"], user_info.get("is_guest", True)
@@ -471,7 +423,6 @@ async def get_critique_log_rows(authorization: Optional[str] = Header(None)):
 
     return CritiqueLogResponse(rows=rows)
 
-
 @app.post("/analyze")
 async def analyze_operation(payload: dict, authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
@@ -491,7 +442,6 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             detail=f"Invalid operation. Must be 'ask', 'compare', or 'critique'"
         )
     
-    # Validate embedding model if provided
     if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
         raise HTTPException(
             status_code=400,
@@ -514,6 +464,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             k=payload.get("top_k", 7),
             doc_name=payload.get("doc_name"),
             model=payload.get("model"),
+            normalize_vectors=payload.get("normalize_vectors", True),
             embedding_model=embedding_model,
             temperature=temperature,
             username=username,
@@ -535,6 +486,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             models=models,
             k=payload.get("top_k", 7),
             doc_name=payload.get("doc_name"),
+            normalize_vectors=payload.get("normalize_vectors", True),
             embedding_model=embedding_model,
             temperature=temperature,
             username=username,
@@ -564,6 +516,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             k=payload.get("top_k", 7),
             doc_name=payload.get("doc_name"),
             self_correct=self_correct,
+            normalize_vectors=payload.get("normalize_vectors", True),
             embedding_model=embedding_model,
             temperature=temperature,
             username=username,
@@ -575,12 +528,8 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
         **result
     }
 
-
 @app.post("/reset-critique-log")
 async def reset_critique_log_endpoint(authorization: Optional[str] = Header(None)):
-    """
-    Reset / delete all logged critique runs (JSONL file).
-    """
     user_info = await get_current_user_optional(authorization)
     if user_info:
         username, is_guest = user_info["username"], user_info.get("is_guest", True)
@@ -588,7 +537,6 @@ async def reset_critique_log_endpoint(authorization: Optional[str] = Header(None
         username, is_guest = "default", True
     reset_critique_log_file(username, is_guest)
     return {"status": "ok", "message": "Critique log reset"}
-
 
 @app.delete("/documents")
 async def delete_all_documents(authorization: Optional[str] = Header(None)):

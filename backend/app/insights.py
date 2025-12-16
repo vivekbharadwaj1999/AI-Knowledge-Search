@@ -3,22 +3,25 @@ from typing import Any, Dict, List, Optional
 
 from app.config import LLMClient
 
-
 def _build_insights_prompt(question: str, answer: str, context: List[str]) -> str:
     joined_context = "\n\n---\n\n".join(context)
     return f"""
 You are an assistant that analyzes an answer and its supporting context.
 
 Question:
+    pass
 {question}
 
 Answer:
+    pass
 {answer}
 
 Context:
+    pass
 {joined_context}
 
 Return a STRICT JSON object with the following keys:
+    pass
 
 - summary: short summary of the answer (string)
 - key_points: list of 3-7 key bullet points (array of strings)
@@ -35,6 +38,7 @@ Return a STRICT JSON object with the following keys:
       (5 = absolutely key, 3 = helpful, 1 = minor, 0 = irrelevant)
 
 IMPORTANT:
+    pass
 - Different context chunks may be tagged like "[Source: DOC_NAME]" to indicate
   different documents. If they clearly disagree, briefly reflect that in
   key_points or sentiment.
@@ -42,7 +46,6 @@ IMPORTANT:
 - For sentence_importance, include at most 15 sentences, pick those that
   best explain or support the answer for this question.
 """
-
 
 def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
     start = raw.find("{")
@@ -55,7 +58,6 @@ def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
         return json.loads(snippet)
     except json.JSONDecodeError:
         return {}
-
 
 def generate_insights(
     question: str,

@@ -29,19 +29,19 @@ export default function UserDropdown({ username, isGuest, onLogout, onDeleteAcco
 
   const handleStartOver = () => {
     onLogout();
-    window.location.reload(); // Refresh the page
+    window.location.reload();
   };
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-100 hover:bg-slate-800"
+        className="flex items-center gap-2 rounded-lg border border-emerald-500 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-100 hover:bg-slate-800"
       >
         <span className="hidden sm:inline">{username}</span>
         <span className="sm:hidden">{username}</span>
         <svg
-          className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`w-4 h-4 text-emerald-500 transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"

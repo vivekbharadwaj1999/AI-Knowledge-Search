@@ -1,7 +1,6 @@
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
-
 class AskRequest(BaseModel):
     question: str
     top_k: int = 5
@@ -11,12 +10,10 @@ class AskRequest(BaseModel):
     normalize_vectors: bool = True
     embedding_model: Optional[str] = None
 
-
 class SourceChunk(BaseModel):
     doc_name: str
     text: str
     score: float
-
 
 class AskResponse(BaseModel):
     answer: str
@@ -24,18 +21,15 @@ class AskResponse(BaseModel):
     model_used: str
     sources: List[SourceChunk] = []
 
-
 class InsightsRequest(BaseModel):
     question: str
     answer: str
     context: List[str]
     model: Optional[str] = None
 
-
 class SentenceImportance(BaseModel):
     sentence: str
     score: int
-
 
 class InsightsResponse(BaseModel):
     summary: str
@@ -49,22 +43,18 @@ class InsightsResponse(BaseModel):
     highlights: List[List[str]] = []
     sentence_importance: List[SentenceImportance] = []
 
-
 class ReportSection(BaseModel):
     heading: str
     content: str
-
 
 class QAItem(BaseModel):
     question: str
     answer: str
 
-
 class KnowledgeGraphEdge(BaseModel):
     source: str
     relation: str
     target: str
-
 
 class DocumentReport(BaseModel):
     doc_name: str
@@ -89,11 +79,9 @@ class DocumentReport(BaseModel):
     explain_like_im_5: str
     cheat_sheet: List[str]
 
-
 class ReportRequest(BaseModel):
     doc_name: str
     model: Optional[str] = None
-
 
 class DocPairRelation(BaseModel):
     doc_a: str
@@ -101,12 +89,10 @@ class DocPairRelation(BaseModel):
     similarity: float
     relationship: str
 
-
 class CrossDocRelations(BaseModel):
     documents: List[str]
     global_themes: List[str]
     relations: List[DocPairRelation]
-
 
 class CrossDocRelationsRequest(BaseModel):
     model: Optional[str] = None
@@ -115,14 +101,12 @@ class CrossDocRelationsRequest(BaseModel):
     max_pairs: int = 12
     min_similarity: float = 0.2
 
-
 class CritiqueScores(BaseModel):
     correctness: Optional[float] = None
     completeness: Optional[float] = None
     clarity: Optional[float] = None
     hallucination_risk: Optional[float] = None
     prompt_quality: Optional[float] = None
-
 
 class CritiqueRound(BaseModel):
     round: int
@@ -136,7 +120,6 @@ class CritiqueRound(BaseModel):
     prompt_issue_tags: List[str] = []
     scores: Optional[CritiqueScores] = None
 
-
 class CritiqueRequest(BaseModel):
     question: str
     answer_model: str
@@ -147,7 +130,6 @@ class CritiqueRequest(BaseModel):
     similarity: Optional[str] = "cosine"
     normalize_vectors: bool = True
     embedding_model: Optional[str] = None
-
 
 class CritiqueResponse(BaseModel):
     question: str
@@ -162,7 +144,6 @@ class CritiqueResponse(BaseModel):
     prompt_issue_tags: List[str] = []
     scores: Optional[CritiqueScores] = None
     rounds: List[CritiqueRound] = []
-
 
 class CritiqueLogRow(BaseModel):
     timestamp: Optional[str] = None
@@ -181,27 +162,21 @@ class CritiqueLogRow(BaseModel):
     delta_correctness: Optional[float] = None
     delta_hallucination: Optional[float] = None
 
-
 class CritiqueLogResponse(BaseModel):
     rows: List[CritiqueLogRow]
 
-
-# Authentication schemas
 class SignupRequest(BaseModel):
     username: str
     password: str
-
 
 class LoginRequest(BaseModel):
     username: str
     password: str
 
-
 class AuthResponse(BaseModel):
     token: str
     username: str
     is_guest: bool
-
 
 class UserResponse(BaseModel):
     username: str

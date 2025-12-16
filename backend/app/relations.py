@@ -4,13 +4,11 @@ from app.config import LLMClient
 from app.vector_store import get_document_embeddings, get_document_previews
 from app.schemas import CrossDocRelations, DocPairRelation
 
-
 def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
     n = sum(x * x for x in v) ** 0.5
     if n <= eps:
         return v
     return [x / n for x in v]
-
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     if len(a) != len(b):
@@ -22,24 +20,20 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
         return 0.0
     return dot / (na * nb)
 
-
 def _dot(a: List[float], b: List[float]) -> float:
     if len(a) != len(b):
         return 0.0
     return sum(x * y for x, y in zip(a, b))
-
 
 def _neg_l2(a: List[float], b: List[float]) -> float:
     if len(a) != len(b):
         return float("-inf")
     return -sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
 
-
 def _neg_l1(a: List[float], b: List[float]) -> float:
     if len(a) != len(b):
         return float("-inf")
     return -sum(abs(x - y) for x, y in zip(a, b))
-
 
 def _keyword_overlap_score(text_a: str, text_b: str) -> float:
     a_tokens = {t for t in text_a.lower().split() if t}
@@ -49,7 +43,6 @@ def _keyword_overlap_score(text_a: str, text_b: str) -> float:
     inter = len(a_tokens & b_tokens)
     union = len(a_tokens | b_tokens)
     return inter / union
-
 
 def _safe_json_object(raw: str) -> Dict[str, Any]:
     if not raw:
@@ -63,7 +56,6 @@ def _safe_json_object(raw: str) -> Dict[str, Any]:
         return json.loads(snippet)
     except json.JSONDecodeError:
         return {}
-
 
 def analyze_cross_document_relations(
     model: Optional[str] = None,

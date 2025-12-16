@@ -15,7 +15,6 @@ CHUNK_SIZE_CHARS = 10000
 
 SAFE_MAX_PROMPT_CHARS = 20000
 
-
 def _chunk_text_by_chars(text: str, max_chars: int) -> List[str]:
     chunks: List[str] = []
     start = 0
@@ -36,7 +35,6 @@ def _chunk_text_by_chars(text: str, max_chars: int) -> List[str]:
 
     return chunks
 
-
 def _summarize_long_document(
     full_text: str,
     llm: LLMClient,
@@ -46,6 +44,7 @@ def _summarize_long_document(
 ) -> str:
     """
     Use the full document but process it in multiple LLM calls:
+        pass
     - Summarize each chunk separately.
     - Concatenate the partial summaries into a 'meta-document'.
     """
@@ -60,11 +59,13 @@ def _summarize_long_document(
 You are summarizing part {idx} of {len(parts)} of a longer technical document.
 
 PART {idx} CONTENT:
+    pass
 -------------------
 {part}
 -------------------
 
 Write a concise summary of this part focusing on:
+    pass
 - main ideas
 - important definitions or equations
 - key arguments or results
@@ -76,7 +77,6 @@ Use 2–5 short paragraphs. Do NOT add JSON, backticks, or metadata.
 
     combined = "\n\n".join(summaries)
     return combined
-
 
 def _truncate_for_prompt(text: str, max_chars: int = SAFE_MAX_PROMPT_CHARS) -> str:
     if len(text) <= max_chars:
@@ -91,20 +91,49 @@ def _truncate_for_prompt(text: str, max_chars: int = SAFE_MAX_PROMPT_CHARS) -> s
         + "\n\n[Note: Source text was truncated slightly to fit within model limits.]"
     )
 
-
 def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
     if not raw:
         return {}
-    start = raw.find("{")
-    end = raw.rfind("}")
+    
+    cleaned = raw.strip()
+    
+    if cleaned.startswith("```"):
+        first_newline = cleaned.find("\n")
+        if first_newline != -1:
+            cleaned = cleaned[first_newline + 1:]
+        else:
+            cleaned = cleaned[3:]
+    
+    if cleaned.rstrip().endswith("```"):
+        cleaned = cleaned.rstrip()[:-3]
+    
+    cleaned = cleaned.strip()
+    
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
     if start == -1 or end == -1 or end <= start:
         return {}
-    snippet = raw[start : end + 1]
+    
+    snippet = cleaned[start : end + 1]
+    
     try:
-        return json.loads(snippet)
-    except json.JSONDecodeError:
+        parsed = json.loads(snippet)
+        return parsed
+    except json.JSONDecodeError as e:
+        
+        try:
+            error_pos = e.pos
+            if error_pos:
+                truncated = snippet[:error_pos]
+                last_brace = truncated.rfind("}")
+                if last_brace > 0:
+                    salvaged = snippet[:last_brace + 1]
+                    parsed = json.loads(salvaged)
+                    return parsed
+        except:
+            pass
+        
         return {}
-
 
 def _build_report_prompt(doc_text: str) -> str:
     return f"""
@@ -114,37 +143,43 @@ You are given the content of a single document (such as lecture notes, a researc
 slides, or a technical article). Your job is to turn it into a detailed interactive study report.
 
 DOCUMENT CONTENT:
+    pass
 -----------------
 {doc_text}
 -----------------
 
 Return a STRICT JSON object with the following keys:
+    pass
 
 - executive_summary: 1–2 paragraphs high-level summary of the document.
-- sections: array of objects, each with:
+- sections: array of 3-5 objects max, each with:
     - heading: short heading (invent if necessary).
-    - content: 1–3 paragraphs explaining that section of the document.
-- key_concepts: array of short concept names.
+    - content: 1–2 paragraphs explaining that section of the document.
+- key_concepts: array of 5-8 short concept names.
 - concept_explanations: array of same length as key_concepts, each a 2–3 sentence explanation.
-- relationships: array of 1–3 sentence strings describing how 2–4 concepts relate.
-- knowledge_graph: array of objects, each with:
+- relationships: array of 2-4 strings describing how 2–3 concepts relate.
+- knowledge_graph: array of 5-10 objects max, each with:
     - source: concept name (string),
     - relation: short verb phrase (string),
     - target: concept name (string).
-- practice_questions: array of objects, each with:
+- practice_questions: array of 3-5 objects max, each with:
     - question: short knowledge-check question (string),
     - answer: concise answer (string).
 - difficulty_level: one of "beginner", "intermediate", "advanced".
-- difficulty_explanation: 2–4 sentences explaining why that difficulty was chosen.
-- study_path: ordered array of bullet-point strings for how to study this document.
+- difficulty_explanation: 2–3 sentences explaining why that difficulty was chosen.
+- study_path: ordered array of 4-6 bullet-point strings for how to study this document.
 - explain_like_im_5: simplified explanation in one paragraph as if to a 5-year-old.
-- cheat_sheet: array of bullet-point strings summarising key formulas, facts, or steps.
+- cheat_sheet: array of 5-8 bullet-point strings summarising key formulas, facts, or steps.
 
 CRITICAL RULES:
+    pass
 - Output ONLY a single valid JSON object, with no backticks or extra commentary.
+- Keep responses CONCISE - don't write essays, keep to the limits above.
+- Use proper JSON syntax: all strings must be in double quotes, escape special characters.
+- If a string contains quotes, use \\" to escape them.
+- Always close all arrays and objects properly.
 - If you are unsure, make reasonable assumptions but stay consistent.
 """
-
 
 def generate_document_report(
     doc_name: str,
@@ -160,7 +195,12 @@ def generate_document_report(
     - For smaller documents (len <= max_chars), use the raw text directly.
     - For larger ones, first summarize in chunks, then build the report from the combined summary.
     """
+    
     full_text = get_document_text(doc_name, max_chars=None, username=username, is_guest=is_guest)
+    
+    
+    if not full_text or len(full_text.strip()) == 0:
+        raise ValueError(f"Document '{doc_name}' not found or is empty for user")
 
     llm = LLMClient()
 
@@ -177,7 +217,7 @@ def generate_document_report(
     source_text = _truncate_for_prompt(source_text)
 
     prompt = _build_report_prompt(source_text)
-    raw = llm.complete(prompt, model=model, max_tokens=2048)
+    raw = llm.complete(prompt, model=model, max_tokens=2048, temperature=0.0)
 
     data = _safe_parse_json_object(raw)
 
@@ -195,7 +235,11 @@ def generate_document_report(
                     out.append(str(item))
         return out
 
-    executive_summary = str(data.get("executive_summary", "") or "")
+    exec_sum_raw = data.get("executive_summary", "")
+    if isinstance(exec_sum_raw, list):
+        executive_summary = "\n\n".join(str(item) for item in exec_sum_raw if item)
+    else:
+        executive_summary = str(exec_sum_raw or "")
 
     sections_raw = data.get("sections") or []
     sections: List[ReportSection] = []
@@ -203,8 +247,19 @@ def generate_document_report(
         for sec in sections_raw:
             if not isinstance(sec, dict):
                 continue
-            heading = str(sec.get("heading", "") or "")
-            content = str(sec.get("content", "") or "")
+            heading_raw = sec.get("heading", "")
+            content_raw = sec.get("content", "")
+            
+            if isinstance(heading_raw, list):
+                heading = " ".join(str(item) for item in heading_raw if item)
+            else:
+                heading = str(heading_raw or "")
+                
+            if isinstance(content_raw, list):
+                content = "\n\n".join(str(item) for item in content_raw if item)
+            else:
+                content = str(content_raw or "")
+                
             if heading or content:
                 sections.append(ReportSection(heading=heading, content=content))
 
@@ -238,13 +293,24 @@ def generate_document_report(
                 practice_questions.append(QAItem(question=question, answer=answer))
 
     difficulty_level = str(data.get("difficulty_level", "") or "")
-    difficulty_explanation = str(data.get("difficulty_explanation", "") or "")
+    
+    diff_exp_raw = data.get("difficulty_explanation", "")
+    if isinstance(diff_exp_raw, list):
+        difficulty_explanation = " ".join(str(item) for item in diff_exp_raw if item)
+    else:
+        difficulty_explanation = str(diff_exp_raw or "")
 
     study_path = as_list_of_str(data.get("study_path") or [])
-    explain_like_im_5 = str(data.get("explain_like_im_5", "") or "")
+    
+    eli5_raw = data.get("explain_like_im_5", "")
+    if isinstance(eli5_raw, list):
+        explain_like_im_5 = " ".join(str(item) for item in eli5_raw if item)
+    else:
+        explain_like_im_5 = str(eli5_raw or "")
+        
     cheat_sheet = as_list_of_str(data.get("cheat_sheet") or [])
 
-    return DocumentReport(
+    final_report = DocumentReport(
         doc_name=doc_name,
         executive_summary=executive_summary,
         sections=sections,
@@ -259,3 +325,4 @@ def generate_document_report(
         explain_like_im_5=explain_like_im_5,
         cheat_sheet=cheat_sheet,
     )
+    return final_report
