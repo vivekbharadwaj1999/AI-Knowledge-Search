@@ -58,7 +58,7 @@ def answer_question(
     # Determine which embedding model to use
     if embedding_model is None and doc_name is not None:
         # Try to get the embedding model used for this document
-        embedding_model = get_document_embedding_model(doc_name)
+        embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
     
     embed_client = EmbeddingClient(model_name=embedding_model)
     query_embedding = embed_client.embed_query(question)
@@ -215,6 +215,8 @@ def get_chunks_for_all_methods(
     doc_name: Optional[str] = None,
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> Dict[str, Any]:
     """
     Get chunks using all similarity methods.
@@ -229,14 +231,14 @@ def get_chunks_for_all_methods(
     """
     # Determine which embedding model to use
     if embedding_model is None and doc_name is not None:
-        embedding_model = get_document_embedding_model(doc_name)
+        embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
     
     embed_client = EmbeddingClient(model_name=embedding_model)
     query_embedding = embed_client.embed_query(query_text)
     embedding_dimension = len(query_embedding)
     embedding_preview = query_embedding[:100] if embedding_dimension > 0 else []
     
-    all_records = _load_records()
+    all_records = _load_records(username=username, is_guest=is_guest)
 
     if not all_records:
         return {"error": "No documents available"}
@@ -337,10 +339,12 @@ def analyze_ask_with_all_methods(
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
     temperature: Optional[float] = None,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
         question, k, doc_name, normalize_vectors=normalize_vectors,
-        embedding_model=embedding_model
+        embedding_model=embedding_model, username=username, is_guest=is_guest
     )
     if "error" in retrieval_data:
         return retrieval_data
@@ -413,10 +417,12 @@ def analyze_compare_with_all_methods(
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
     temperature: Optional[float] = None,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
         question, k, doc_name, normalize_vectors=normalize_vectors,
-        embedding_model=embedding_model
+        embedding_model=embedding_model, username=username, is_guest=is_guest
     )
     if "error" in retrieval_data:
         return retrieval_data
@@ -500,10 +506,12 @@ def analyze_critique_with_all_methods(
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
     temperature: Optional[float] = None,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
         question, k, doc_name, normalize_vectors=normalize_vectors,
-        embedding_model=embedding_model
+        embedding_model=embedding_model, username=username, is_guest=is_guest
     )
     if "error" in retrieval_data:
         return retrieval_data

@@ -180,6 +180,8 @@ def run_critique(
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
     temperature: Optional[float] = None,
+    username: Optional[str] = None,
+    is_guest: bool = True,
 ) -> Dict[str, Any]:
     """
     Run critique on a question and answer.
@@ -195,6 +197,8 @@ def run_critique(
         normalize_vectors: Whether to normalize vectors
         embedding_model: Embedding model to use for retrieval
         temperature: Temperature for LLM generation
+        username: Username for per-user logging
+        is_guest: Whether user is guest (for logging)
     """
     from app.qa import answer_question
     llm = LLMClient()
