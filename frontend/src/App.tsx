@@ -27,7 +27,6 @@ import {
   analyzeOperation,
   setAuthToken,
   getAuthToken,
-  isGuest,
   createGuestSession,
   getCurrentUser,
   logout,
