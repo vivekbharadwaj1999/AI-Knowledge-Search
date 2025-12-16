@@ -22,10 +22,26 @@ const steps: Step[] = [
     description:
       "VivBot lets you upload documents, set configurable similarity metrics and Top K, run grounded Q&A, compare LLMs, generate AI reports and insights, and run critique pipelines for research.",
   },
+    {
+    id: "account",
+    navLabel: "Guest & Account",
+    title: "1. Guest mode & Account management",
+    description:
+      "VivBot starts in guest mode for instant access. Create an account to save your uploaded documents and logs permanently.",
+    points: [
+      "**Guest mode (default)**: When you open VivBot, you automatically start as a guest with full feature access.",
+      "**Guest data is temporary**: All uploaded documents, embeddings, and critique logs are deleted when you close the browser.",
+      "**Create an account**: Click 'Login/Signup' in the top right to create an account.",
+      "**Account benefits**: Your documents, vector embeddings, and critique logs persist forever. You can logout and login anytime without losing data.",
+      "**Data isolation**: Each user's data is completely separate. Guests and logged in users each have their own private storage.",
+      "**Logout (logged-in users)**: Click your username dropdown → 'Logout' to logout from your account and return to guest mode.",
+      "**Delete Account**: Logged in users can permanently delete their account and all associated data from the dropdown menu.",
+    ],
+  },
   {
     id: "upload",
     navLabel: "Document upload & index",
-    title: "1. Upload & index a document",
+    title: "2. Upload & index a document",
     description:
       "Start by uploading a document in section 1: “Upload & index a document”. Supported formats include PDF, TXT, CSV, DOCX, XLSX, and PPTX.",
     points: [
@@ -39,7 +55,7 @@ const steps: Step[] = [
   {
     id: "scope",
     navLabel: "Search scope",
-    title: "2. Documents & search scope",
+    title: "3. Documents & search scope",
     description:
       "Use section 2 to decide which documents are used when answering questions or generating reports.",
     points: [
@@ -52,7 +68,7 @@ const steps: Step[] = [
   {
     id: "similarity",
     navLabel: "Similarity, Top K, & Norm.",
-    title: "3. Similarity functions, Top K and Vector normalization",
+    title: "4. Similarity functions, Top K and Vector normalization",
     description:
       "For experiments, VivBot lets you choose how similarity between embeddings is measured and how many Top K relevant chunks are retrieved.",
     points: [
@@ -71,7 +87,7 @@ const steps: Step[] = [
   {
     id: "ask",
     navLabel: "Ask (Q&A)",
-    title: "4. Ask questions (grounded Q&A)",
+    title: "5. Ask questions (grounded Q&A)",
     description:
       "Section 3 answers questions using only the selected document(s) or all documents as context.",
     points: [
@@ -89,7 +105,7 @@ const steps: Step[] = [
   {
     id: "insights",
     navLabel: "Auto Insights",
-    title: "5. Auto Insights",
+    title: "6. Auto Insights",
     description:
       "Auto Insights provides a higher level layer of reasoning on top of Q&A and your uploaded documents. It transforms raw answers and source chunks into structured insights.",
     points: [
@@ -103,7 +119,7 @@ const steps: Step[] = [
   {
     id: "compare",
     navLabel: "Compare models",
-    title: "6. Compare models",
+    title: "7. Compare models",
     description:
       "Section 4 lets you compare how two different LLMs answer the same question.",
     points: [
@@ -116,7 +132,7 @@ const steps: Step[] = [
   {
     id: "critique",
     navLabel: "Critique",
-    title: "7. Critique answer & prompt",
+    title: "8. Critique answer & prompt",
     description:
       "Section 5 analyses both the prompt and the model answer, and can run a double critique loop.",
     points: [
@@ -132,7 +148,7 @@ const steps: Step[] = [
 {
     id: "advanced",
     navLabel: "Advanced analysis",
-    title: "8. Advanced analysis",
+    title: "9. Advanced analysis",
     description:
       "Advanced analysis runs a deeper, structured breakdown of an existing Ask / Compare / Critique result using the same scope, Top K, and normalization but with every similarity function. It includes Answer Stability analysis to measure how retrieval methods affect outputs.",
     points: [
@@ -147,7 +163,7 @@ const steps: Step[] = [
   {
     id: "output",
     navLabel: "Output panel",
-    title: "9. Output panel on the right",
+    title: "10. Output panel on the right",
     description:
       "All results show up as separate cards on the right side of the screen.",
     points: [
