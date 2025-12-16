@@ -38,6 +38,8 @@ def answer_question(
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
     temperature: Optional[float] = None,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ):
     """
     Answer a question using the vector store.
@@ -68,6 +70,8 @@ def answer_question(
         similarity=similarity or "cosine",
         query_text=question,
         normalize_vectors=normalize_vectors,
+        username=username,
+        is_guest=is_guest,
     )
 
     context_for_llm: List[str] = []

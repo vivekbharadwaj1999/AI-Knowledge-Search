@@ -1,7 +1,75 @@
 import axios from "axios";
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+// Token management
+let authToken: string | null = localStorage.getItem("auth_token");
+let isGuestMode: boolean = localStorage.getItem("is_guest") === "true";
+
+export function setAuthToken(token: string | null, isGuest: boolean = false) {
+  authToken = token;
+  isGuestMode = isGuest;
+  
+  if (token) {
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("is_guest", isGuest ? "true" : "false");
+    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  } else {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("is_guest");
+    delete axios.defaults.headers.common["Authorization"];
+  }
+}
+
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
+export function isGuest(): boolean {
+  return isGuestMode;
+}
+
+// Initialize axios with token if it exists
+if (authToken) {
+  axios.defaults.headers.common["Authorization"] = `Bearer ${authToken}`;
+}
+
+// Authentication API
+export async function createGuestSession(): Promise<{ token: string; username: string; is_guest: boolean }> {
+  const res = await axios.post(`${API_BASE}/auth/guest`);
+  return res.data;
+}
+
+export async function signup(username: string, password: string): Promise<{ token: string; username: string; is_guest: boolean }> {
+  const res = await axios.post(`${API_BASE}/auth/signup`, { username, password });
+  return res.data;
+}
+
+export async function login(username: string, password: string): Promise<{ token: string; username: string; is_guest: boolean }> {
+  const res = await axios.post(`${API_BASE}/auth/login`, { username, password });
+  return res.data;
+}
+
+export async function getCurrentUser(): Promise<{ username: string; is_guest: boolean } | null> {
+  try {
+    const res = await axios.get(`${API_BASE}/auth/me`);
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await axios.post(`${API_BASE}/auth/logout`);
+  } catch (err) {
+    console.error("Logout error:", err);
+  }
+}
+
+export async function deleteAccount(): Promise<void> {
+  await axios.delete(`${API_BASE}/auth/account`);
+}
 
 export type AskResult = {
   answer: string;

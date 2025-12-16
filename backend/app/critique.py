@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from app.config import LLMClient, GROQ_MODEL
+from app.auth import get_user_critique_log_path
 
 PROMPT_ISSUE_TAGS = [
     "missing_context",
@@ -159,7 +160,7 @@ def _safe_scores(data: Dict[str, Any]) -> Dict[str, Optional[float]]:
     }
 
 
-def reset_critique_log_file() -> None:
+def reset_critique_log_file(username: Optional[str] = None, is_guest: bool = False) -> None:
     """
     Delete the critique log file (if it exists).
     Used by the /reset-critique-log endpoint.
@@ -289,7 +290,8 @@ def run_critique(
             "rounds": rounds,
         }
         os.makedirs("data", exist_ok=True)
-        with open("data/critique_log.jsonl", "a", encoding="utf-8") as f:
+        log_path = get_user_critique_log_path(username, is_guest) if username else "data/critique_log.jsonl"
+        with open(log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
     except Exception as e:
         print("Failed to write critique_log.jsonl:", e)

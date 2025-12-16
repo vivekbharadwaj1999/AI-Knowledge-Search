@@ -80,7 +80,7 @@ AVAILABLE_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
         "dimension": 384,
         "description": "Fast, lightweight model (local, free)"
     },
-    "bge-base-en-v1.5": {
+    "BAAI/bge-base-en-v1.5": {
         "label": "BGE – bge-base-en-v1.5",
         "type": "local",
         "dimension": 768,
@@ -148,7 +148,11 @@ class EmbeddingClient:
             self.model = None
         else:
             # Local sentence-transformers model
-            self.model = SentenceTransformer(self.model_name)
+            # Some models (like Alibaba GTE) need trust_remote_code=True
+            if "Alibaba-NLP" in self.model_name or "gte-large" in self.model_name:
+                self.model = SentenceTransformer(self.model_name, trust_remote_code=True)
+            else:
+                self.model = SentenceTransformer(self.model_name)
             self.openai_client = None
 
     def embed(self, texts: List[str]) -> List[List[float]]:

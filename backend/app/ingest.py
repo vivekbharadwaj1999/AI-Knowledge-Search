@@ -143,6 +143,8 @@ def ingest_file(
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
     embedding_model: Optional[str] = None,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> int:
     """
     Ingest a file and store embeddings.
@@ -190,5 +192,5 @@ def ingest_file(
     embeddings = embed_client.embed_documents(chunks)
 
     # Store the embedding model name with the embeddings
-    add_embeddings(chunks, embeddings, doc_name=doc_name, embedding_model=embedding_model)
+    add_embeddings(chunks, embeddings, doc_name=doc_name, embedding_model=embedding_model, username=username, is_guest=is_guest)
     return len(chunks)

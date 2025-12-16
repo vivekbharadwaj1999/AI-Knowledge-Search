@@ -6,6 +6,15 @@ from typing import Any, Dict, List, Optional
 VECTOR_STORE_PATH = os.path.join("data", "vector_store.jsonl")
 
 
+def get_vector_store_path(username: Optional[str] = None, is_guest: bool = False) -> str:
+    """Get the vector store path for a specific user, guest, or global"""
+    if username:
+        if is_guest:
+            return f"data/guests/{username}/vector_store.jsonl"
+        return f"data/users/{username}/vector_store.jsonl"
+    return VECTOR_STORE_PATH
+
+
 def _l2_norm(v: List[float]) -> float:
     return math.sqrt(sum(x * x for x in v))
 
@@ -17,15 +26,17 @@ def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
     return [x / n for x in v]
 
 
-def _ensure_dir():
-    os.makedirs(os.path.dirname(VECTOR_STORE_PATH), exist_ok=True)
+def _ensure_dir(path: str):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
 
 
 def add_embeddings(
     texts: List[str], 
     embeddings: List[List[float]], 
     doc_name: str,
-    embedding_model: Optional[str] = None
+    embedding_model: Optional[str] = None,
+    username: Optional[str] = None,
+    is_guest: bool = False
 ) -> None:
     """
     Add embeddings to the vector store.
@@ -36,8 +47,9 @@ def add_embeddings(
         doc_name: Name of the document
         embedding_model: Name of the embedding model used (optional)
     """
-    _ensure_dir()
-    with open(VECTOR_STORE_PATH, "a", encoding="utf-8") as f:
+    vector_store_path = get_vector_store_path(username, is_guest)
+    _ensure_dir(vector_store_path)
+    with open(vector_store_path, "a", encoding="utf-8") as f:
         for text, emb in zip(texts, embeddings):
             rec: Dict[str, Any] = {
                 "doc_name": doc_name,
@@ -50,11 +62,12 @@ def add_embeddings(
             f.write(json.dumps(rec) + "\n")
 
 
-def _load_records() -> List[Dict[str, Any]]:
-    if not os.path.exists(VECTOR_STORE_PATH):
+def _load_records(username: Optional[str] = None, is_guest: bool = False) -> List[Dict[str, Any]]:
+    vector_store_path = get_vector_store_path(username, is_guest)
+    if not os.path.exists(vector_store_path):
         return []
     records: List[Dict[str, Any]] = []
-    with open(VECTOR_STORE_PATH, "r", encoding="utf-8") as f:
+    with open(vector_store_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -66,12 +79,12 @@ def _load_records() -> List[Dict[str, Any]]:
     return records
 
 
-def get_latest_doc_name() -> Optional[str]:
+def get_latest_doc_name(username: Optional[str] = None, is_guest: bool = False) -> Optional[str]:
     if not os.path.exists(VECTOR_STORE_PATH):
         return None
 
     last: Optional[Dict[str, Any]] = None
-    with open(VECTOR_STORE_PATH, "r", encoding="utf-8") as f:
+    with open(vector_store_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -86,12 +99,12 @@ def get_latest_doc_name() -> Optional[str]:
     return last.get("doc_name")
 
 
-def get_document_embedding_model(doc_name: str) -> Optional[str]:
+def get_document_embedding_model(doc_name: str, username: Optional[str] = None, is_guest: bool = False) -> Optional[str]:
     """
     Get the embedding model used for a specific document.
     Returns the model name if found, otherwise None.
     """
-    records = _load_records()
+    records = _load_records(username, is_guest)
     for rec in records:
         if rec.get("doc_name") == doc_name:
             return rec.get("embedding_model")
@@ -144,6 +157,8 @@ def similarity_search(
     similarity: str = "cosine",
     query_text: Optional[str] = None,
     normalize_vectors: bool = True,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Return top-k records most similar to the query.
@@ -158,7 +173,7 @@ def similarity_search(
     - If doc_name is None, search across ALL documents.
     - If doc_name is provided, restrict the search to that single document.
     """
-    records = _load_records()
+    records = _load_records(username, is_guest)
     if not records:
         return []
 
@@ -203,8 +218,8 @@ def similarity_search(
     return results[:k]
 
 
-def get_document_text(doc_name: str, max_chars: int = 20000) -> str:
-    records = _load_records()
+def get_document_text(doc_name: str, max_chars: int = 20000, username: Optional[str] = None, is_guest: bool = False) -> str:
+    records = _load_records(username, is_guest)
     chunks: List[str] = []
 
     for rec in records:
@@ -222,21 +237,21 @@ def get_document_text(doc_name: str, max_chars: int = 20000) -> str:
     return full_text
 
 
-def list_documents() -> List[str]:
+def list_documents(username: Optional[str] = None, is_guest: bool = False) -> List[str]:
     names = set()
-    for rec in _load_records():
+    for rec in _load_records(username, is_guest):
         name = rec.get("doc_name")
         if name:
             names.add(name)
     return sorted(names)
 
 
-def get_documents_info() -> List[Dict[str, Any]]:
+def get_documents_info(username: Optional[str] = None, is_guest: bool = False) -> List[Dict[str, Any]]:
     """
     Get information about all documents including their embedding models.
     Returns a list of dicts with doc_name and embedding_model.
     """
-    records = _load_records()
+    records = _load_records(username, is_guest)
     docs_info: Dict[str, Dict[str, Any]] = {}
     
     for rec in records:
@@ -256,8 +271,8 @@ def get_documents_info() -> List[Dict[str, Any]]:
     return list(docs_info.values())
 
 
-def get_document_embeddings() -> Dict[str, List[float]]:
-    records = _load_records()
+def get_document_embeddings(username: Optional[str] = None, is_guest: bool = False) -> Dict[str, List[float]]:
+    records = _load_records(username, is_guest)
 
     chunks_by_doc: Dict[str, List[dict]] = {}
 
@@ -292,8 +307,8 @@ def get_document_embeddings() -> Dict[str, List[float]]:
     return doc_vectors
 
 
-def get_document_previews(max_chars_per_doc: int = 1200) -> Dict[str, str]:
-    records = _load_records()
+def get_document_previews(max_chars_per_doc: int = 1200, username: Optional[str] = None, is_guest: bool = False) -> Dict[str, str]:
+    records = _load_records(username, is_guest)
     texts_by_doc: Dict[str, str] = {}
 
     for rec in records:
@@ -319,6 +334,7 @@ def get_document_previews(max_chars_per_doc: int = 1200) -> Dict[str, str]:
     return texts_by_doc
 
 
-def clear_vector_store() -> None:
-    if os.path.exists(VECTOR_STORE_PATH):
-        os.remove(VECTOR_STORE_PATH)
+def clear_vector_store(username: Optional[str] = None, is_guest: bool = False) -> None:
+    vector_store_path = get_vector_store_path(username, is_guest)
+    if os.path.exists(vector_store_path):
+        os.remove(vector_store_path)

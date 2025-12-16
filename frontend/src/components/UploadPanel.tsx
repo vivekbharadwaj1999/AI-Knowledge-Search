@@ -19,7 +19,7 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
     const baseLabel = model.label.split("–")[0].trim();
 
     if (model.id === "all-MiniLM-L6-v2") return `${baseLabel} (fast, free)`;
-    if (model.id === "bge-base-en-v1.5") return `${baseLabel} (reliable, free)`;
+    if (model.id === "BAAI/bge-base-en-v1.5") return `${baseLabel} (reliable, free)`;
     if (model.id === "Alibaba-NLP/gte-large-en-v1.5") return `GTE-large (best quality, free)`;
     if (model.id === "jinaai/jina-embeddings-v2-base-en") return `Jina v2 (long docs, free)`;
     if (model.id === "intfloat/e5-base") return `E5 (efficient, free)`;

@@ -6,6 +6,9 @@ import ReactMarkdown from "react-markdown";
 import logo from "./assets/logo.webp";
 import InstructionsModal from "./components/InstructionsModal";
 import UnifiedAnalysisModal from "./components/AdvancedAnalysisModal";
+import AuthModal from "./components/AuthModal";
+import UserDropdown from "./components/UserDropdown";
+import DeleteAccountModal from "./components/DeleteAccountModal";
 
 import {
   fetchDocuments,
@@ -22,6 +25,13 @@ import {
   fetchCritiqueLogRows,
   resetCritiqueLog,
   analyzeOperation,
+  setAuthToken,
+  getAuthToken,
+  isGuest,
+  createGuestSession,
+  getCurrentUser,
+  logout,
+  deleteAccount,
 } from "./api";
 
 
@@ -634,6 +644,12 @@ const SIMILARITY_LABELS: Record<SimilarityMetric, string> = {
 };
 
 function App() {
+  // Auth state
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const [isGuestUser, setIsGuestUser] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const [documents, setDocuments] = useState<string[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | undefined>();
   const [docVersion, setDocVersion] = useState(0);
@@ -693,6 +709,68 @@ function App() {
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
   const [analysisModalData, setAnalysisModalData] = useState<any>(null);
   const [analysisLoading, setAnalysisLoading] = useState<Record<string, boolean>>({});
+
+  // Initialize guest session or restore login
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = getAuthToken();
+      if (token) {
+        const user = await getCurrentUser();
+        if (user) {
+          setCurrentUsername(user.username);
+          setIsGuestUser(user.is_guest);
+        } else {
+          // Token invalid, create guest
+          const guestData = await createGuestSession();
+          setAuthToken(guestData.token, true);
+          setCurrentUsername(guestData.username);
+          setIsGuestUser(true);
+        }
+      } else {
+        // No token, create guest session
+        const guestData = await createGuestSession();
+        setAuthToken(guestData.token, true);
+        setCurrentUsername(guestData.username);
+        setIsGuestUser(true);
+      }
+    };
+    initAuth();
+  }, []);
+
+  const handleAuthSuccess = (token: string, username: string, isGuest: boolean) => {
+    setAuthToken(token, isGuest);
+    setCurrentUsername(username);
+    setIsGuestUser(isGuest);
+    setDocVersion((v) => v + 1);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    // Create new guest session
+    const guestData = await createGuestSession();
+    setAuthToken(guestData.token, true);
+    setCurrentUsername(guestData.username);
+    setIsGuestUser(true);
+    setDocuments([]);
+    setOutputFeed([]);
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      await deleteAccount();
+      // After successful deletion, create new guest session
+      const guestData = await createGuestSession();
+      setAuthToken(guestData.token, true);
+      setCurrentUsername(guestData.username);
+      setIsGuestUser(true);
+      setDocuments([]);
+      setOutputFeed([]);
+      setShowDeleteModal(false);
+    } catch (err) {
+      // Error is handled in the modal
+      throw err;
+    }
+  };
 
   useEffect(() => {
     async function checkExistingLogs() {
@@ -1214,13 +1292,44 @@ function App() {
             </p>
           </div>
         </div>
-
-        <button
-          onClick={() => setShowInstructions(true)}
-          className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-100 hover:bg-slate-800"
-        >
-          Instructions
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <div
+            className="
+      flex flex-col items-end gap-2
+      sm:flex-row sm:items-center sm:gap-3">
+            <button
+              onClick={() => setShowInstructions(true)}
+              className="
+        rounded-lg border border-slate-600 px-3 py-1.5
+        text-xs sm:text-sm font-medium text-slate-100 hover:bg-slate-800">
+              Instructions
+            </button>
+            {isGuestUser ? (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="
+          rounded-lg border border-sky-600 bg-sky-600/10 px-3 py-1.5
+          text-xs sm:text-sm font-medium text-sky-400 hover:bg-sky-600/20">
+                Login/Signup
+              </button>
+            ) : (
+              currentUsername && (
+                <UserDropdown
+                  username={currentUsername}
+                  isGuest={isGuestUser}
+                  onLogout={handleLogout}
+                  onDeleteAccount={() => setShowDeleteModal(true)}
+                />
+              )
+            )}
+          </div>
+          {isGuestUser && (
+            <p className="text-[9px] sm:text-2xs text-slate-400 text-right max-w-[260px] sm:max-w-none">
+              Guest mode - data will be deleted when you close the browser. Login/signup
+              to save uploaded docs and logs.
+            </p>
+          )}
+        </div>
       </header>
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden pb-20 lg:pb-0">
@@ -2300,6 +2409,20 @@ function App() {
         open={showInstructions}
         onClose={() => setShowInstructions(false)}
       />
+
+      <AuthModal
+        open={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={handleAuthSuccess}
+      />
+
+      {showDeleteModal && currentUsername && (
+        <DeleteAccountModal
+          username={currentUsername}
+          onConfirm={handleDeleteAccount}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
 
       <UnifiedAnalysisModal
         isOpen={analysisModalOpen}
