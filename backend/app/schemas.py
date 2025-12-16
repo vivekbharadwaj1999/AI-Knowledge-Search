@@ -112,6 +112,8 @@ class CrossDocRelationsRequest(BaseModel):
     model: Optional[str] = None
     similarity: Optional[str] = "cosine"
     normalize_vectors: bool = True
+    max_pairs: int = 12
+    min_similarity: float = 0.2
 
 
 class CritiqueScores(BaseModel):

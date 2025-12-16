@@ -72,9 +72,6 @@ def analyze_cross_document_relations(
     similarity: str = "cosine",
     normalize_vectors: bool = True,
 ) -> CrossDocRelations:
-    if normalize_vectors:
-        emb_a = _l2_normalize(emb_a)
-        emb_b = _l2_normalize(emb_b)
 
     doc_embeddings = get_document_embeddings()
     doc_previews = get_document_previews()
@@ -89,6 +86,10 @@ def analyze_cross_document_relations(
             a, b = docs[i], docs[j]
             emb_a = doc_embeddings[a]
             emb_b = doc_embeddings[b]
+
+            if normalize_vectors:
+                emb_a = _l2_normalize(emb_a)
+                emb_b = _l2_normalize(emb_b)
 
             if similarity == "dot":
                 sim = _dot(emb_a, emb_b)
