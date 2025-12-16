@@ -192,7 +192,7 @@ export default function UnifiedAnalysisModal({
   const embeddingModel: string | undefined = queryAnalysis.embedding_model;
   const fullEmbedding: number[] | undefined = data.query_embedding;
   const [showFullEmbedding, setShowFullEmbedding] = useState(false);
-  
+
   // Answer Stability controls
   const [stabilityTemperature, setStabilityTemperature] = useState<number>(0);
   const [isRecomputing, setIsRecomputing] = useState(false);
@@ -267,7 +267,7 @@ export default function UnifiedAnalysisModal({
     try {
       // Import analyzeOperation dynamically
       const { analyzeOperation } = await import("../api");
-      
+
       // Build params based on operation type
       let params: any = {
         operation: data.operation,
@@ -292,11 +292,11 @@ export default function UnifiedAnalysisModal({
       }
 
       const result = await analyzeOperation(params);
-      
+
       // Update current stability and results
       setLocalAnswerStability(result.answer_stability);
       setLocalResultsByMethod(result.results_by_method);
-      
+
       // Append to history with full results
       setStabilityHistory(prev => [
         ...prev,
@@ -919,7 +919,6 @@ export default function UnifiedAnalysisModal({
                     </div>
                   </section>
 
-                  {/* Answer Stability Section */}
                   {data.answer_stability && (
                     <section className="bg-slate-950/60 border border-slate-800 rounded-lg p-4">
                       <h3 className="text-sm font-bold text-purple-300 mb-2">
@@ -929,7 +928,6 @@ export default function UnifiedAnalysisModal({
                         Same LLM, temperature={stabilityTemperature.toFixed(1)}, identical prompt. Only retrieval similarity changed.
                       </p>
 
-                      {/* Temperature Control */}
                       <div className="bg-slate-900/40 rounded-lg p-3 mb-4">
                         <div className="flex items-center justify-between mb-3">
                           <div>
@@ -937,14 +935,14 @@ export default function UnifiedAnalysisModal({
                               Temperature Control
                             </div>
                             <div className="text-[10px] text-slate-400">
-                              0 = deterministic, 2 = creative
+                              0 = min (deterministic), 2 = max (creative)
                             </div>
                           </div>
                           <div className="text-[10px] text-purple-400 font-semibold">
                             {stabilityHistory.length} experiment{stabilityHistory.length !== 1 ? 's' : ''} in history
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
                           <label className="flex items-center gap-2 text-xs text-slate-300">
                             <span className="whitespace-nowrap">Temperature:</span>
                             <div className="flex items-center gap-2">
@@ -952,8 +950,8 @@ export default function UnifiedAnalysisModal({
                                 type="button"
                                 onClick={decreaseTemperature}
                                 className="flex h-7 w-7 items-center justify-center rounded-full
-                                 border border-slate-600 bg-slate-900
-                                 text-xs text-slate-100 hover:bg-slate-800"
+         border border-slate-600 bg-slate-900
+         text-xs text-slate-100 hover:bg-slate-800"
                               >
                                 <span className="text-xl pb-1">–</span>
                               </button>
@@ -964,25 +962,26 @@ export default function UnifiedAnalysisModal({
                                 value={stabilityTemperature.toFixed(1)}
                                 onChange={handleTemperatureChange}
                                 className="w-14 rounded-md border border-slate-700 bg-slate-800
-                                 px-2 py-1 text-xs text-slate-100 text-center
-                                 focus:outline-none focus:ring-2 focus:ring-purple-500"
+         px-2 py-1 text-xs text-slate-100 text-center
+         focus:outline-none focus:ring-2 focus:ring-purple-500"
                               />
 
                               <button
                                 type="button"
                                 onClick={increaseTemperature}
                                 className="flex h-7 w-7 items-center justify-center rounded-full
-                                 border border-slate-600 bg-slate-900
-                                 text-xs text-slate-100 hover:bg-slate-800"
+         border border-slate-600 bg-slate-900
+         text-xs text-slate-100 hover:bg-slate-800"
                               >
                                 <span className="text-xl pb-1">+</span>
                               </button>
                             </div>
                           </label>
+
                           <button
                             onClick={handleRecomputeStability}
                             disabled={isRecomputing}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-[11px] font-semibold rounded transition-colors"
+                            className="self-start sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-[11px] font-semibold rounded transition-colors"
                           >
                             {isRecomputing ? "Recomputing..." : "Recompute"}
                           </button>
@@ -990,7 +989,6 @@ export default function UnifiedAnalysisModal({
                       </div>
 
                       <div className="overflow-x-auto space-y-6">
-                        {/* For ASK and CRITIQUE operations */}
                         {(operation === "ask" || operation === "critique") && localAnswerStability?.[chosenMethod] && (
                           <div>
                             {operation === "critique" && (
@@ -1015,7 +1013,7 @@ export default function UnifiedAnalysisModal({
                               <tbody>
                                 {METHODS.map((method) => {
                                   if (method === chosenMethod) return null;
-                                  
+
                                   const stability = localAnswerStability[chosenMethod]?.[method];
                                   if (!stability) return null;
 
@@ -1067,7 +1065,6 @@ export default function UnifiedAnalysisModal({
                           </div>
                         )}
 
-                        {/* For COMPARE operation - show stability for each model */}
                         {operation === "compare" && (
                           <div className="space-y-4">
                             {Object.keys(localAnswerStability || {}).map((model) => {
@@ -1096,7 +1093,7 @@ export default function UnifiedAnalysisModal({
                                     <tbody>
                                       {METHODS.map((method) => {
                                         if (method === chosenMethod) return null;
-                                        
+
                                         const stability = stabilityForModel[chosenMethod]?.[method];
                                         if (!stability) return null;
 
