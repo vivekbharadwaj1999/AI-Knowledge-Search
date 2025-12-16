@@ -23,6 +23,7 @@ import {
   type CritiqueScores,
   type CritiqueRound,
   fetchCritiqueLogRows,
+  checkCritiqueLogsExist,
   resetCritiqueLog,
   analyzeOperation,
   setAuthToken,
@@ -703,13 +704,10 @@ function App() {
   const [mobileView, setMobileView] = useState<"operations" | "output">(
     "operations"
   );
-
-  // Analysis modal state
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
   const [analysisModalData, setAnalysisModalData] = useState<any>(null);
   const [analysisLoading, setAnalysisLoading] = useState<Record<string, boolean>>({});
 
-  // Initialize guest session or restore login
   useEffect(() => {
     const initAuth = async () => {
       const token = getAuthToken();
@@ -719,14 +717,12 @@ function App() {
           setCurrentUsername(user.username);
           setIsGuestUser(user.is_guest);
         } else {
-          // Token invalid, create guest
           const guestData = await createGuestSession();
           setAuthToken(guestData.token, true);
           setCurrentUsername(guestData.username);
           setIsGuestUser(true);
         }
       } else {
-        // No token, create guest session
         const guestData = await createGuestSession();
         setAuthToken(guestData.token, true);
         setCurrentUsername(guestData.username);
@@ -745,28 +741,27 @@ function App() {
 
   const handleLogout = async () => {
     await logout();
-    // Create new guest session
     const guestData = await createGuestSession();
     setAuthToken(guestData.token, true);
     setCurrentUsername(guestData.username);
     setIsGuestUser(true);
     setDocuments([]);
     setOutputFeed([]);
+    window.location.reload();
   };
 
   const handleDeleteAccount = async () => {
     try {
       await deleteAccount();
-      // After successful deletion, create new guest session
       const guestData = await createGuestSession();
       setAuthToken(guestData.token, true);
       setCurrentUsername(guestData.username);
       setIsGuestUser(true);
       setDocuments([]);
       setOutputFeed([]);
+      window.location.reload();
       setShowDeleteModal(false);
     } catch (err) {
-      // Error is handled in the modal
       throw err;
     }
   };
@@ -774,8 +769,8 @@ function App() {
   useEffect(() => {
     async function checkExistingLogs() {
       try {
-        const rows = await fetchCritiqueLogRows();
-        setHasCritiqueLogs(rows.length > 0);
+        const result = await checkCritiqueLogsExist();
+        setHasCritiqueLogs(result.exists);
       } catch (err) {
         console.error("Failed to check critique logs", err);
       }
@@ -783,7 +778,6 @@ function App() {
 
     checkExistingLogs();
   }, []);
-
 
   useEffect(() => {
     fetchDocuments()
@@ -1712,9 +1706,10 @@ function App() {
               <button
                 type="button"
                 onClick={handleResetCritiqueLog}
+                disabled={!hasCritiqueLogs}
                 className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-medium
-               border border-rose-600 text-rose-200 bg-slate-900 hover:bg-rose-800/40"
-              >
+               border border-rose-600 text-rose-200 bg-slate-900 hover:bg-rose-800/40
+               disabled:opacity-50 disabled:cursor-not-allowed">
                 Reset critique logs
               </button>
             </div>
