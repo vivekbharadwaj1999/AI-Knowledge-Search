@@ -5,13 +5,11 @@ from app.vector_store import similarity_search, _load_records, get_document_embe
 from app.critique import run_critique
 from rouge_score import rouge_scorer
 
-
 def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
     n = math.sqrt(sum(x * x for x in v))
     if n <= eps:
         return v
     return [x / n for x in v]
-
 
 def build_prompt(question: str, context_chunks: List[str]) -> str:
     context_text = "\n\n---\n\n".join(context_chunks)
@@ -27,7 +25,6 @@ Question: {question}
 - Context chunks may indicate their source as "[Source: DOC_NAME]". If different sources disagree, briefly point this out and explain.
 - Be clear and concise.
 """
-
 
 def answer_question(
     question: str,
@@ -55,9 +52,7 @@ def answer_question(
                         uses the model that was used to embed that document.
         temperature: Temperature for LLM generation
     """
-    # Determine which embedding model to use
     if embedding_model is None and doc_name is not None:
-        # Try to get the embedding model used for this document
         embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
     
     embed_client = EmbeddingClient(model_name=embedding_model)
@@ -103,7 +98,6 @@ def answer_question(
     plain_chunks = [s["text"] for s in sources]
 
     return answer, plain_chunks, sources
-
 
 def calculate_all_similarities(
     query_embedding: List[float],
@@ -154,7 +148,6 @@ def calculate_all_similarities(
         "hybrid": 0.7 * cosine + 0.3 * _keyword_overlap(query_text, chunk_text)
     }
 
-
 def calculate_answer_stability(
     answers_by_method: Dict[str, str],
     selected_method: str,
@@ -172,32 +165,27 @@ def calculate_answer_stability(
     
     selected_answer = answers_by_method[selected_method]
     
-    # Initialize embedding client for semantic similarity
     embed_client = EmbeddingClient(model_name=embedding_model)
     selected_embedding = embed_client.embed_query(selected_answer)
     
-    # Initialize ROUGE scorer
     scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
     
     stability = {}
     
     for method, answer in answers_by_method.items():
         if method == selected_method:
-            # Same method has perfect stability
             stability[method] = {
                 "cosine_semantic": 1.0,
                 "rouge_l": 1.0
             }
             continue
         
-        # Calculate semantic similarity (cosine between embeddings)
         other_embedding = embed_client.embed_query(answer)
         cosine_sim = sum(a * b for a, b in zip(selected_embedding, other_embedding))
         norm_selected = math.sqrt(sum(x * x for x in selected_embedding))
         norm_other = math.sqrt(sum(x * x for x in other_embedding))
         cosine_sim = cosine_sim / (norm_selected * norm_other) if norm_selected and norm_other else 0.0
         
-        # Calculate ROUGE-L F1 score
         rouge_scores = scorer.score(selected_answer, answer)
         rouge_l_f1 = rouge_scores['rougeL'].fmeasure
         
@@ -207,7 +195,6 @@ def calculate_answer_stability(
         }
     
     return stability
-
 
 def get_chunks_for_all_methods(
     query_text: str,
@@ -229,7 +216,6 @@ def get_chunks_for_all_methods(
         embedding_model: Embedding model to use. If None and doc_name is provided,
                         uses the model that was used to embed that document.
     """
-    # Determine which embedding model to use
     if embedding_model is None and doc_name is not None:
         embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
     
@@ -240,11 +226,16 @@ def get_chunks_for_all_methods(
     
     all_records = _load_records(username=username, is_guest=is_guest)
 
+    if all_records:
+        if isinstance(all_records[0].get('embedding'), list):
+            pass
+
     if not all_records:
         return {"error": "No documents available"}
 
     if doc_name:
         all_records = [r for r in all_records if r.get("doc_name") == doc_name]
+        
         if not all_records:
             return {"error": f"No chunks for document: {doc_name}"}
 
@@ -269,6 +260,7 @@ def get_chunks_for_all_methods(
             "all_scores": scores,
             "chunk_length": len(text)
         })
+
 
     top_k_by_method = {}
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
@@ -330,7 +322,6 @@ def get_chunks_for_all_methods(
         }
     }
 
-
 def analyze_ask_with_all_methods(
     question: str,
     k: int = 7,
@@ -384,8 +375,6 @@ def analyze_ask_with_all_methods(
             "context_used": len(context_chunks)
         }
 
-    # Calculate answer stability for all methods
-    # We'll calculate it for each method as if it were the "selected" one
     answer_stability_by_method = {}
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         answer_stability_by_method[method] = calculate_answer_stability(
@@ -408,7 +397,6 @@ def analyze_ask_with_all_methods(
         "answer_stability": answer_stability_by_method,
     }
 
-
 def analyze_compare_with_all_methods(
     question: str,
     models: List[str],
@@ -430,7 +418,6 @@ def analyze_compare_with_all_methods(
     llm = LLMClient()
     results_by_method = {}
 
-    # Collect answers for each model separately
     answers_by_model = {model: {} for model in models}
 
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
@@ -451,7 +438,6 @@ def analyze_compare_with_all_methods(
                 "answer": answer,
                 "length": len(answer)
             }
-            # Store for stability calculation
             answers_by_model[model][method] = answer
 
         results_by_method[method] = {
@@ -470,7 +456,6 @@ def analyze_compare_with_all_methods(
             "context_used": len(context_chunks)
         }
 
-    # Calculate answer stability for each model
     answer_stability_by_model = {}
     for model in models:
         answer_stability_by_model[model] = {}
@@ -494,7 +479,6 @@ def analyze_compare_with_all_methods(
         "query_embedding": retrieval_data.get("query_embedding"),
         "answer_stability": answer_stability_by_model,
     }
-
 
 def analyze_critique_with_all_methods(
     question: str,
@@ -550,10 +534,8 @@ def analyze_critique_with_all_methods(
             "context_used": len(chunks),
         }
 
-        # Collect final answer for stability calculation
         final_answers_by_method[method] = critique_result.get("answer", "")
 
-    # Calculate answer stability for final answers
     answer_stability_by_method = {}
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         answer_stability_by_method[method] = calculate_answer_stability(

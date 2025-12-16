@@ -14,7 +14,6 @@ CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 UPLOAD_DIR = "data/raw"
 
-
 def read_pdf_text(file_path: str) -> str:
     reader = PdfReader(file_path)
     text_parts = []
@@ -23,11 +22,9 @@ def read_pdf_text(file_path: str) -> str:
         text_parts.append(page_text)
     return "\n".join(text_parts)
 
-
 def read_text_file(file_path: str) -> str:
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         return f.read()
-
 
 def read_docx_text(file_path: str) -> str:
     doc = Document(file_path)
@@ -46,7 +43,6 @@ def read_docx_text(file_path: str) -> str:
 
     return "\n".join(parts)
 
-
 def read_pptx_text(file_path: str) -> str:
     prs = Presentation(file_path)
     parts: list[str] = []
@@ -64,7 +60,6 @@ def read_pptx_text(file_path: str) -> str:
             parts.append("")
 
     return "\n".join(parts)
-
 
 def read_xlsx_text(file_path: str) -> str:
     sheets = pd.read_excel(file_path, sheet_name=None)
@@ -106,7 +101,6 @@ def read_xlsx_text(file_path: str) -> str:
 
     return "\n".join(parts)
 
-
 def chunk_text(
     text: str,
     chunk_size: int = CHUNK_SIZE,
@@ -135,7 +129,6 @@ def chunk_text(
             break
         start = end - overlap
     return chunks
-
 
 def ingest_file(
     file_path: str,
@@ -182,15 +175,12 @@ def ingest_file(
     if not chunks:
         return 0
 
-    # Create embedding client with specified model (or use default)
     try:
         embed_client = EmbeddingClient(model_name=embedding_model)
     except RuntimeError as e:
-        # Re-raise with more context
         raise RuntimeError(f"Failed to initialize embedding model '{embedding_model}': {str(e)}")
     
     embeddings = embed_client.embed_documents(chunks)
 
-    # Store the embedding model name with the embeddings
     add_embeddings(chunks, embeddings, doc_name=doc_name, embedding_model=embedding_model, username=username, is_guest=is_guest)
     return len(chunks)

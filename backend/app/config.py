@@ -33,7 +33,6 @@ GROQ_AVAILABLE_MODELS: Dict[str, str] = {
     "qwen/qwen3-32b": "Qwen3 32B – multilingual & strong general model",
 }
 
-
 class LLMClient:
     def __init__(self, api_key: Optional[str] = None) -> None:
         self.client = Groq(api_key=api_key or GROQ_API_KEY)
@@ -64,15 +63,11 @@ class LLMClient:
 
         return resp.choices[0].message.content
 
-
 def get_model_label(model_id: str) -> str:
     return GROQ_AVAILABLE_MODELS.get(model_id, model_id)
 
-
-# Embedding model configuration
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 
-# Available embedding models with metadata
 AVAILABLE_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
     "all-MiniLM-L6-v2": {
         "label": "SBERT – all-MiniLM-L6-v2",
@@ -129,7 +124,6 @@ AVAILABLE_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
         "description": "OpenAI's highest quality model (API, paid)"
     }
 }
-
 
 class EmbeddingClient:
     def __init__(self, model_name: Optional[str] = None) -> None:
@@ -192,7 +186,6 @@ class EmbeddingClient:
         if not text:
             return []
         return self.embed([text])[0]
-
 
 def get_embedding_dimension(model_name: str) -> int:
     model_info = AVAILABLE_EMBEDDING_MODELS.get(model_name, {})
