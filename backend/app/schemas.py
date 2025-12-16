@@ -184,3 +184,25 @@ class CritiqueLogRow(BaseModel):
 
 class CritiqueLogResponse(BaseModel):
     rows: List[CritiqueLogRow]
+
+
+# Authentication schemas
+class SignupRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    username: str
+    is_guest: bool
+
+
+class UserResponse(BaseModel):
+    username: str
+    is_guest: bool
