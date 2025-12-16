@@ -1,251 +1,360 @@
-# **AI Knowledge Search Engine**
+# VivBot: A Document Knowledge Search and an RAG Research Platform
 
-Full Stack Retrieval Augmented Generation System with Model Comparison, Critique Analysis, and Automated Insights
+**Full Stack Retrieval Augmented Generation System with Multi Model Analysis, Explainability Dashboard, and Research Experimentation**
 
-This project implements a production ready Retrieval Augmented Generation (RAG) system with a full stack architecture. Users can upload documents, run context aware queries, compare multiple large language models, and evaluate responses through a custom critique and similarity-analysis framework. The system is deployed on a Linux VPS using Nginx and systemd, accessible via public IP.
-
----
-
-## **1. Overview**
-
-This application integrates a FastAPI backend, a React + TypeScript frontend, and multiple Groq hosted LLMs. It provides an end to end system with:
-
-* Custom ingestion and embedding pipeline
-* JSONL based vector store (no LangChain or LlamaIndex)
-* Dynamic model selection
-* Parallel model comparison
-* Multi round critique and prompt-quality analysis
-* Multi similarity vector scoring
-* Automated insight generation
-* Context visualization with relevance highlighting
-* Stateful history management
-* VPS deployment without domain/HTTPS requirements
+An RAG experiment platform featuring 9 embedding models, 10 LLMs, 5 similarity metrics, comprehensive explainability, automated quality assessment, and advanced analysis capabilities. Built for research, and experimentation.
 
 ---
 
-## **2. Functional Features**
+## What Makes This Different
 
-### **2.1 Document Upload and Ingestion**
+Unlike typical RAG chatbots, VivBot is a research experimentation platform that enables:
 
-Uploaded documents undergo a multi-stage pipeline:
+- **Multi Model Comparison**: Test 9 embedding models and 10 LLMs simultaneously
+- **Explainability First**: See exactly why each chunk was retrieved with 5 different similarity metrics
+- **Answer Stability Analysis**: Quantify consistency across retrieval strategies using semantic similarity + ROUGE-L
+- **Self-Correction Engine**: Automated critique with quality scoring and iterative improvement
+- **Knowledge Extraction**: Generate study guides, knowledge graphs, and cross-document analyses
+- **Research Infrastructure**: Complete experiment logging, reproducibility, and export capabilities
 
-* Text extraction and normalization
-* Chunk segmentation
-* Embedding generation using Groq hosted embedding models
-* Storage of embeddings and metadata in a JSONL based vector store
-
-### **2.2 Retrieval-Augmented Question Answering**
-
-For each query:
-
-1. The system embeds the question.
-2. Performs similarity search over the vector store.
-3. Retrieves the top relevant chunks.
-4. Constructs a context grounded prompt.
-5. Sends the prompt to the selected model.
-6. Returns the answer along with exact retrieved context.
-
-### **2.3 Supported Language Models**
-
-Supported Groq hosted models include:
-
-* **LLaMA 3.1 8B** (fast)
-* **LLaMA 3.3 70B** (quality)
-* **GPT-OSS 20B** (normal)
-* **GPT-OSS 120B** (large)
-* **LLaMA 4 Maverick 17B** (preview)
-* **Qwen3 32B** (multilingual)
-* **Groq Compound Model** (system)
-
-Model selection is handled dynamically by the backend.
-
-### **2.4 Model Comparison**
-
-A dedicated comparison mode allows:
-
-* Executing identical queries on two selected models
-* Independent retrieval for each model
-* Parallel inference
-* Side by side answer presentation
-* Separate context cards showing which sources influenced each model
-
-### **2.5 Critique Engine**
-
-A secondary LLM evaluates both the model generated answer and the user’s prompt.
-
-#### **Answer Evaluation**
-
-The critique engine assesses:
-
-* Correctness
-* Completeness
-* Faithfulness to retrieved context
-* Hallucination risk
-* Clarity and structure
-
-#### **Prompt Evaluation**
-
-The system identifies issues such as:
-
-* Missing context
-* Vague or ambiguous phrasing
-* Unclear intent or audience
-* Lack of format specification
-* Multi part questions
-
-It outputs standardized issue tags (Eg. `missing_context`, `too_vague`, `no_format_specified`) and provides a suggested improved prompt.
-
-### **2.6 Automated Insights**
-
-The insights module generates:
-
-* High level summaries
-* Key takeaways
-* Topic breakdown
-* Recommended follow-up questions
-
-### **2.7 Context Transparency and Highlighting**
-
-Retrieved chunks are displayed with:
-
-* Highlighted relevant segments
-* Metadata indicating chunk origin
-* Expandable context cards
-
-### **2.8 Interaction History**
-
-The application stores past interactions in the session including:
-
-* Queries
-* Answers
-* Comparisons
-* Critiques
-* Insights
-* Uploaded documents
+450+ possible configurations (9 embeddings × 10 LLMs × 5 metrics) with full explainability at every step.
 
 ---
 
-## **2.9 Research Oriented Evaluation Features**
+## Key Features at a Glance
 
-### **2.9.1 Multi Round Critique Loop**
+### Multi-Model Intelligence
+- **9 Embedding Models**: From 384D (MiniLM) to 3072D (OpenAI), including SBERT, BGE, E5, INSTRUCTOR, GTE, Jina AI
+- **10 LLM Options**: Llama 3.1/3.3/4, GPT-OSS, Qwen3, Kimi K2 (up to 256k context)
+- **5 Similarity Metrics**: Cosine, Dot Product, L2/L1 Distance, Hybrid (semantic + keyword)
 
-The system implements a critique pipeline in which a secondary LLM evaluates both:
+### Advanced Analysis Dashboard
+- **Three Operation Modes**:
+  - **Ask**: Single model with multi-metric retrieval comparison
+  - **Compare**: Multiple models side-by-side across all metrics
+  - **Critique**: Self-correction with quality scoring
+- **Answer Stability Metrics**: Semantic (cosine) + ROUGE-L F1 comparison
+- **Query Embedding Visualization**: See the actual vectors (up to 3072D)
+- **Explainability**: Every chunk shows scores from all 5 similarity methods
 
-* **the user’s original question**, and
-* **the answer produced by the selected base model**.
+### Quality Assessment Engine
+- **Multi-Round Critique**: Up to 2 rounds of self-correction
+- **4D Quality Scoring**: Correctness, Completeness, Clarity, Hallucination Risk (0-5 scale)
+- **Prompt Engineering**: 6 issue tags + improved prompt suggestions
+- **Experiment Logging**: JSONL logs with full history and delta metrics
 
-The critique module identifies issues such as missing context, vague phrasing, unclear intent, and multi part prompts. It generates:
+### Knowledge Tools
+- **Document Reports**: Executive summaries, concept explanations, study paths, knowledge graphs
+- **Cross-Document Analysis**: LLM-powered relationship extraction between multiple documents
+- **Insights Generation**: Entities, keywords, follow-up questions, mindmaps
+- **Practice Q&A**: Auto-generated knowledge check questions
 
-* **structured correctness assessments**
-* **faithfulness and hallucination checks**
-* **clarity and completeness evaluations**
-* **standardized issue tags**
-* **improved prompt suggestions**
-
-### **2.9.2 Multi Similarity Vector Scoring**
-
-The system computes multiple similarity metrics for retrieved chunks:
-
-* **Cosine similarity**
-* **Dot product similarity**
-* **Negative Euclidean (L2) distance**
-* **Negative Manhattan (L1) distance**
-* **Hybrid weighted scoring (Cosine + Jaccard keyword)**
-
-### **2.9.3 JSON Based Evaluation Dashboard**
-
-Critique outputs and similarity metrics are stored in a lightweight JSON structure containing:
-
-* Prompt issue tags
-* Critique summaries
-* Per chunk similarity scores
-* Model specific evaluation metadata
+### Document Processing
+- **6 File Formats**: PDF, DOCX, PPTX, XLSX, TXT, CSV
+- **Intelligent Chunking**: Configurable size/overlap with boundary awareness
+- **Per-Document Model Tracking**: Each document remembers its embedding model
 
 ---
 
-## **3. Backend Architecture (FastAPI)**
+## Architecture
 
-Key API endpoints:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    React + TypeScript UI                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐  │
+│  │  Upload  │  │  Scope   │  │Operation │  │   Advanced  │  │
+│  │  Panel   │  │  Panel   │  │  Panels  │  │   Analysis  │  │
+│  └──────────┘  └──────────┘  └──────────┘  └─────────────┘  │
+└────────────────────────┬────────────────────────────────────┘
+                         │ REST API
+┌────────────────────────▼────────────────────────────────────┐
+│                     FastAPI Backend                         │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Ingest → Chunk → Embed (9 models) → Vector Store    │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Query → Retrieve (5 metrics) → LLM (10 models)      │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Analyze → Critique → Report → Relations → Insights  │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
 
-* **POST /ingest** — process and index uploaded documents
-* **POST /ask** — retrieval + LLM answering
-* **POST /compare** — dual-model inference
-* **POST /critique** — structured critique pipeline
-* **POST /insights** — insight generation
-* **GET /documents** — list indexed documents
-
-The backend uses FastAPI with Pydantic for schema validation.
-A `systemd` service ensures persistent uptime on the VPS.
-
----
-
-## **4. Frontend Architecture (React + TypeScript)**
-
-The frontend provides:
-
-* Model selection UI
-* Query interface
-* Model comparison view
-* Critique and insights panels
-* Context highlighting components
-* Interaction history
-* Loading and error states
-* SPA routing via Nginx fallback
-* Build system via Vite and styling with Tailwind CSS
-
----
-
-## **5. Deployment and Infrastructure**
-
-The system is deployed using:
-
-* **Ubuntu Server VPS**
-* **Nginx** reverse proxy
-* Static hosting for the React build
-* **systemd** service for backend
-* CORS configuration
-* SPA handling using `try_files`
-* Public IP access
+**Tech Stack:**
+- **Frontend**: React, TypeScript, Vite, Tailwind CSS, Headless UI
+- **Backend**: FastAPI, Python 3.10+, Uvicorn
+- **ML/AI**: Sentence-Transformers, Groq API, OpenAI API (optional), ROUGE
+- **Document Processing**: pypdf, python-docx, python-pptx, openpyxl, pandas
+- **Deployment**: Nginx, systemd, Ubuntu VPS
 
 ---
 
-## **6. Technology Stack**
+## Quick Start
 
-**Frontend**
+### Prerequisites
+```bash
+# Backend
+Python 3.10+
+pip install -r requirements.txt
 
-* React
-* TypeScript
-* Vite
-* Tailwind CSS
+# Frontend
+Node.js 18+
+npm install
+```
 
-**Backend**
+### Environment Setup
+```bash
+# backend/.env
+GROQ_API_KEY=your_groq_api_key_here
+OPENAI_API_KEY=your_openai_key_here  # Optional, only for OpenAI embeddings
+```
 
-* FastAPI
-* Python
-* Uvicorn
-* Pydantic
-* Groq API
+### Running Locally
 
-**Infrastructure**
+**Backend:**
+```bash
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-* Linux (Ubuntu)
-* Nginx
-* systemd
-* VPS deployment
+**Frontend:**
+```bash
+cd frontend
+npm run dev
+# Opens at http://localhost:5173
+```
 
 ---
 
-## **7. Summary**
+## API Endpoints
 
-This project implements a complete RAG based AI knowledge system combining:
+### Core Operations
+- `POST /ingest` - Upload and embed documents (with model selection)
+- `POST /ask` - Standard Q&A with model/metric selection
+- `GET /documents` - List all indexed documents
+- `DELETE /documents` - Clear all documents
 
-* Custom ingestion and vector storage
-* Retrieval based answering
-* Multiple selectable LLMs
-* Parallel model comparison
-* Multi round critique and evaluation
-* Multi similarity vector scoring
-* Automated insight analysis
-* Transparent context visualization
-* Full stack web architecture
-* Live VPS deployment
+### Advanced Analysis
+- `POST /analyze` - Multi-method analysis (ask/compare/critique modes)
+- `POST /critique` - Run critique engine with scoring
+- `GET /critique-log-rows` - Export experiment history
+
+### Knowledge Tools
+- `POST /insights` - Generate insights from Q&A
+- `POST /report` - Generate document study report
+- `POST /document-relations` - Cross-document relationship analysis
+
+### Configuration
+- `GET /embedding-models` - List available embedding models
+
+---
+
+## Research Applications
+
+### Experimental Capabilities
+
+**Research Questions This Platform Can Address:**
+
+1. **Embedding Model Comparison**: How do different embedding models (384D to 3072D) affect retrieval quality?
+2. **Similarity Metric Analysis**: Which similarity metric works best for different document types?
+3. **Answer Stability**: How consistent are LLM answers across retrieval strategies?
+4. **Self-Correction Effectiveness**: Does automated critique improve answer quality?
+5. **Cross-Document Knowledge**: How do LLMs synthesize relationships between documents?
+
+### Reproducibility Features
+
+- **Complete Parameter Logging**: Every experiment records models, metrics, settings, timestamps
+- **JSONL Experiment Logs**: Structured data for analysis in pandas/R
+- **JSON Export**: Results exportable for statistical analysis
+- **Deterministic Operations**: Configurable random seeds, fixed algorithms
+
+### Metrics Collected
+
+- **Retrieval Metrics**: Top-k precision, score distributions across 5 methods
+- **Quality Scores**: Correctness, completeness, clarity, hallucination risk (0-5)
+- **Stability Metrics**: Semantic similarity (cosine) + ROUGE-L F1 between answers
+- **Improvement Deltas**: Round-to-round quality changes in critique mode
+
+---
+
+## Project Structure
+
+```
+vivbot/
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI app + 14 endpoints
+│   │   ├── config.py            # 9 embedding + 10 LLM configs
+│   │   ├── vector_store.py      # JSONL storage + 5 similarity metrics
+│   │   ├── qa.py                # Q&A + advanced analysis
+│   │   ├── critique.py          # Multi-round critique engine
+│   │   ├── insights.py          # Insight generation
+│   │   ├── report.py            # Document report generation
+│   │   ├── relations.py         # Cross-document analysis
+│   │   ├── ingest.py            # Multi-format file processing
+│   │   └── schemas.py           # Pydantic models
+│   ├── data/
+│   │   ├── raw/                 # Uploaded documents
+│   │   ├── vector_store.jsonl   # Embeddings + metadata
+│   │   └── critique_log.jsonl   # Experiment logs
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx         
+│   │   ├── components/
+│   │   │   ├── AdvancedAnalysisModal.tsx 
+│   │   │   ├── UploadPanel.tsx
+│   │   │   ├── AskPanel.tsx
+│   │   │   ├── OutputPanel.tsx
+│   │   │   ├── ChatPanel.tsx
+│   │   │   ├── ReportPanel.tsx
+│   │   │   ├── RelationsOverlay.tsx
+│   │   │   └── InstructionsModal.tsx
+│   │   ├── api.ts               # API client
+│   │   └── workspace.ts
+│   ├── package.json
+│   └── vite.config.ts
+│
+└── README.md
+```
+
+---
+
+## Advanced Features Deep Dive
+
+### 1. Multi-Embedding Architecture
+
+**9 Models Spanning 3 Orders of Magnitude:**
+
+| Model | Dimension | Type | Strength |
+|-------|-----------|------|----------|
+| all-MiniLM-L6-v2 | 384 | Local | Fast baseline |
+| bge-base-en-v1.5 | 768 | Local | General purpose |
+| e5-base | 768 | Local | Efficient |
+| multilingual-e5-base | 768 | Local | 100+ languages |
+| instructor-large | 768 | Local | Instruction-aware |
+| GTE-large-en-v1.5 | 1024 | Local | SOTA, matches OpenAI |
+| jina-v2-base-en | 768 | Local | 8K context window |
+| text-embedding-3-small | 1536 | API | OpenAI efficient |
+| text-embedding-3-large | 3072 | API | OpenAI premium |
+
+**Note**: Each document tracks which embedding model was used, enabling controlled experiments comparing model impact on retrieval quality.
+
+### 2. Five Similarity Metrics Explained
+
+```python
+# 1. Cosine Similarity (default)
+score = dot(query, chunk) / (norm(query) * norm(chunk))
+# Range: [-1, 1], higher = more similar
+
+# 2. Dot Product
+score = dot(query, chunk)
+# Range: unbounded, higher = more similar
+
+# 3. Negative L2 Distance (Euclidean)
+score = -sqrt(sum((q_i - c_i)^2))
+# Range: (-∞, 0], closer to 0 = more similar
+
+# 4. Negative L1 Distance (Manhattan)
+score = -sum(|q_i - c_i|)
+# Range: (-∞, 0], closer to 0 = more similar
+
+# 5. Hybrid (Semantic + Lexical)
+score = 0.7 * cosine(query, chunk) + 0.3 * jaccard(query_words, chunk_words)
+# Combines semantic vectors with keyword overlap
+```
+
+**Use Cases:**
+- **Cosine**: General semantic similarity (most common)
+- **Dot Product**: When vector magnitudes matter
+- **L2/L1**: When distance metrics are preferred
+- **Hybrid**: When exact keyword matches matter (e.g., names, codes)
+
+### 3. Answer Stability Framework
+
+**Problem**: Different retrieval methods may surface different context, leading to answer variation.
+
+**Solution**: Quantify stability using two metrics:
+
+1. **Semantic Similarity**: Embed both answers, compute cosine similarity
+2. **ROUGE-L F1**: Measure longest common subsequence overlap
+
+**Output**: Stability matrix showing how each method's answer compares to every other method.
+
+```
+Example Stability Matrix (Cosine Selected):
+           Cosine   Dot    L2     L1     Hybrid
+Semantic:  1.000   0.923  0.887  0.845  0.912
+ROUGE-L:   1.000   0.834  0.798  0.756  0.821
+```
+
+### 4. Critique Engine Details
+
+**Two-Phase Analysis:**
+
+**Phase 1 - Answer Evaluation:**
+```json
+{
+  "scores": {
+    "correctness": 4.2,      // 0-5, how factually accurate
+    "completeness": 3.8,     // 0-5, how fully answered
+    "clarity": 4.5,          // 0-5, how well structured
+    "hallucination_risk": 0.8  // 0-5, invented information
+  },
+  "answer_critique_markdown": "The answer correctly identifies..."
+}
+```
+
+**Phase 2 - Prompt Evaluation:**
+```json
+{
+  "prompt_issue_tags": ["missing_context", "no_format_specified"],
+  "improved_prompt": "Given the context of...",
+  "prompt_feedback_markdown": "The prompt could be improved by..."
+}
+```
+
+**Self-Correction Loop:**
+1. Generate answer from original prompt
+2. Critique answer + prompt
+3. If quality < 95% or hallucination > 5%, use improved prompt
+4. Generate new answer
+5. Compare round 1 vs round 2 scores
+
+---
+
+### Development Setup
+```bash
+# Backend
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+pip install pytest black flake8  # Dev dependencies
+
+# Frontend
+cd frontend
+npm install
+npm run lint
+npm run test
+```
+
+---
+
+## License
+
+MIT License - see LICENSE for details.
+
+---
+
+## Project Stats
+
+- **Backend**: ~3,500 lines of Python
+- **Frontend**: ~197KB TypeScript/React
+- **Configurations**: 450+ possible (9 × 10 × 5)
+- **API Endpoints**: 14
+- **Components**: 7 major frontend components
+- **Supported File Types**: 6
+- **Embedding Dimensions**: 384D to 3072D
