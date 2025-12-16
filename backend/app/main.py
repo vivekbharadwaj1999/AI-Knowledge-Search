@@ -65,40 +65,47 @@ app.add_middleware(
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
 async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict]:
     if not authorization:
         return None
-    
+
     if not authorization.startswith("Bearer "):
         return None
-    
+
     token = authorization[7:]  # Remove "Bearer " prefix
     user_data = decode_token(token)
     return user_data
 
+
 @app.get("/")
 def root():
     return {"status": "ok", "message": "AI Knowledge Search backend running"}
+
 
 @app.post("/auth/signup", response_model=AuthResponse)
 async def signup(payload: SignupRequest):
     try:
         success = create_user(payload.username, payload.password)
         if not success:
-            raise HTTPException(status_code=400, detail="Username already exists")
-        
+            raise HTTPException(
+                status_code=400, detail="Username already exists")
+
         token = authenticate_user(payload.username, payload.password)
         return AuthResponse(token=token, username=payload.username, is_guest=False)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @app.post("/auth/login", response_model=AuthResponse)
 async def login(payload: LoginRequest):
     token = authenticate_user(payload.username, payload.password)
     if not token:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    
+        raise HTTPException(
+            status_code=401, detail="Invalid username or password")
+
     return AuthResponse(token=token, username=payload.username, is_guest=False)
+
 
 @app.post("/auth/guest", response_model=AuthResponse)
 async def create_guest():
@@ -106,40 +113,45 @@ async def create_guest():
     user_data = decode_token(token)
     return AuthResponse(token=token, username=user_data["username"], is_guest=True)
 
+
 @app.get("/auth/me", response_model=UserResponse)
 async def get_current_user_info(authorization: Optional[str] = Header(None)):
     user_data = await get_current_user_optional(authorization)
     if user_data:
         return UserResponse(username=user_data["username"], is_guest=user_data["is_guest"])
-    
+
     raise HTTPException(status_code=401, detail="Not authenticated")
+
 
 @app.post("/auth/logout")
 async def logout(authorization: Optional[str] = Header(None)):
     user_data = await get_current_user_optional(authorization)
     if user_data and user_data.get("is_guest"):
         cleanup_guest_data(user_data["username"])
-    
+
     return {"status": "ok", "message": "Logged out"}
+
 
 @app.delete("/auth/account")
 async def delete_account(authorization: Optional[str] = Header(None)):
     user_data = await get_current_user_optional(authorization)
-    
+
     if not user_data:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     if user_data.get("is_guest"):
-        raise HTTPException(status_code=400, detail="Guest users cannot delete accounts")
-    
+        raise HTTPException(
+            status_code=400, detail="Guest users cannot delete accounts")
+
     username = user_data["username"]
-    
+
     success = delete_user_account(username)
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return {"status": "ok", "message": f"Account '{username}' deleted successfully"}
+
 
 @app.get("/embedding-models")
 async def get_embedding_models():
@@ -154,6 +166,7 @@ async def get_embedding_models():
         })
     return {"models": models}
 
+
 @app.post("/ingest")
 async def ingest_document(
     file: UploadFile = File(...),
@@ -165,7 +178,7 @@ async def ingest_document(
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
-    
+
     allowed_exts = (".pdf", ".txt", ".csv", ".docx", ".pptx", ".xlsx")
     ext = os.path.splitext(file.filename)[1].lower()
 
@@ -174,7 +187,7 @@ async def ingest_document(
             status_code=400,
             detail="Unsupported file type. Allowed: PDF, TXT, CSV, DOCX, PPTX, XLSX.",
         )
-    
+
     if embedding_model not in AVAILABLE_EMBEDDING_MODELS:
         raise HTTPException(
             status_code=400,
@@ -183,7 +196,7 @@ async def ingest_document(
 
     user_upload_dir = get_user_upload_dir(username, is_guest)
     os.makedirs(user_upload_dir, exist_ok=True)
-    
+
     file_path = os.path.join(user_upload_dir, file.filename)
     with open(file_path, "wb") as f:
         f.write(await file.read())
@@ -203,7 +216,7 @@ async def ingest_document(
             status_code=400,
             detail=str(e)
         )
-    
+
     if chunk_count == 0:
         raise HTTPException(
             status_code=400,
@@ -211,7 +224,7 @@ async def ingest_document(
         )
 
     embedding_dim = get_embedding_dimension(embedding_model)
-    
+
     return {
         "status": "ok",
         "chunks_indexed": chunk_count,
@@ -220,12 +233,13 @@ async def ingest_document(
         "is_guest": is_guest
     }
 
+
 @app.post("/ask", response_model=AskResponse)
 async def ask_question_route(payload: AskRequest, authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
-    
+
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
@@ -257,6 +271,7 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
         sources=sources,
     )
 
+
 @app.post("/insights", response_model=InsightsResponse)
 async def insights_route(payload: InsightsRequest):
     if not payload.answer.strip():
@@ -270,6 +285,7 @@ async def insights_route(payload: InsightsRequest):
     )
     return InsightsResponse(**data)
 
+
 @app.get("/documents")
 async def get_documents(authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
@@ -277,14 +293,16 @@ async def get_documents(authorization: Optional[str] = Header(None)):
     is_guest = user_info.get("is_guest", True) if user_info else True
     return {"documents": list_documents(username, is_guest)}
 
+
 @app.post("/report", response_model=DocumentReport)
 async def create_report(req: ReportRequest, authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     if user_info:
-        username, is_guest = user_info["username"], user_info.get("is_guest", True)
+        username, is_guest = user_info["username"], user_info.get(
+            "is_guest", True)
     else:
         username, is_guest = "default", True
-    
+
     try:
         report = generate_document_report(
             doc_name=req.doc_name,
@@ -300,6 +318,7 @@ async def create_report(req: ReportRequest, authorization: Optional[str] = Heade
         raise HTTPException(
             status_code=500, detail="Failed to generate document report"
         )
+
 
 @app.post("/document-relations", response_model=CrossDocRelations)
 async def document_relations_route(payload: CrossDocRelationsRequest, authorization: Optional[str] = Header(None)):
@@ -326,12 +345,13 @@ async def document_relations_route(payload: CrossDocRelationsRequest, authorizat
             detail="Failed to analyze document relations",
         )
 
+
 @app.post("/critique", response_model=CritiqueResponse)
 async def critique_route(payload: CritiqueRequest, authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
-    
+
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
@@ -349,14 +369,16 @@ async def critique_route(payload: CritiqueRequest, authorization: Optional[str] 
     )
     return data
 
+
 @app.get("/critique-log-rows", response_model=CritiqueLogResponse)
 async def get_critique_log_rows(authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     if user_info:
-        username, is_guest = user_info["username"], user_info.get("is_guest", True)
+        username, is_guest = user_info["username"], user_info.get(
+            "is_guest", True)
     else:
         username, is_guest = "default", True
-    
+
     log_path = Path(get_user_critique_log_path(username, is_guest))
     if not log_path.exists():
         return CritiqueLogResponse(rows=[])
@@ -423,25 +445,57 @@ async def get_critique_log_rows(authorization: Optional[str] = Header(None)):
 
     return CritiqueLogResponse(rows=rows)
 
+
+@app.get("/critique-log-exists")
+async def check_critique_log_exists(authorization: Optional[str] = Header(None)):
+    user_info = await get_current_user_optional(authorization)
+    if user_info:
+        username, is_guest = user_info["username"], user_info.get(
+            "is_guest", True)
+    else:
+        username, is_guest = "default", True
+
+    log_path = Path(get_user_critique_log_path(username, is_guest))
+
+    if not log_path.exists():
+        return {"exists": False, "count": 0}
+
+    count = 0
+    try:
+        with log_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        json.loads(line)
+                        count += 1
+                    except:
+                        pass
+    except:
+        return {"exists": False, "count": 0}
+
+    return {"exists": count > 0, "count": count}
+
+
 @app.post("/analyze")
 async def analyze_operation(payload: dict, authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
-    
+
     operation = payload.get("operation", "").lower()
     normalize_vectors = bool(payload.get("normalize_vectors", True))
     embedding_model = payload.get("embedding_model")
     temperature = payload.get("temperature")
     if temperature is not None:
         temperature = float(temperature)
-    
+
     if operation not in ["ask", "compare", "critique"]:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid operation. Must be 'ask', 'compare', or 'critique'"
         )
-    
+
     if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
         raise HTTPException(
             status_code=400,
@@ -528,24 +582,28 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
         **result
     }
 
+
 @app.post("/reset-critique-log")
 async def reset_critique_log_endpoint(authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     if user_info:
-        username, is_guest = user_info["username"], user_info.get("is_guest", True)
+        username, is_guest = user_info["username"], user_info.get(
+            "is_guest", True)
     else:
         username, is_guest = "default", True
     reset_critique_log_file(username, is_guest)
     return {"status": "ok", "message": "Critique log reset"}
 
+
 @app.delete("/documents")
 async def delete_all_documents(authorization: Optional[str] = Header(None)):
     user_info = await get_current_user_optional(authorization)
     if user_info:
-        username, is_guest = user_info["username"], user_info.get("is_guest", True)
+        username, is_guest = user_info["username"], user_info.get(
+            "is_guest", True)
     else:
         username, is_guest = "default", True
-    
+
     user_upload_dir = get_user_upload_dir(username, is_guest)
     if os.path.exists(user_upload_dir):
         for fname in os.listdir(user_upload_dir):

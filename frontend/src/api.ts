@@ -2,7 +2,6 @@ import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-// Token management
 let authToken: string | null = localStorage.getItem("auth_token");
 let isGuestMode: boolean = localStorage.getItem("is_guest") === "true";
 
@@ -29,12 +28,10 @@ export function isGuest(): boolean {
   return isGuestMode;
 }
 
-// Initialize axios with token if it exists
 if (authToken) {
   axios.defaults.headers.common["Authorization"] = `Bearer ${authToken}`;
 }
 
-// Authentication API
 export async function createGuestSession(): Promise<{ token: string; username: string; is_guest: boolean }> {
   const res = await axios.post(`${API_BASE}/auth/guest`);
   return res.data;
@@ -272,6 +269,11 @@ export type CritiqueLogRow = {
 export async function fetchCritiqueLogRows(): Promise<CritiqueLogRow[]> {
   const res = await axios.get(`${API_BASE}/critique-log-rows`);
   return (res.data.rows || []) as CritiqueLogRow[];
+}
+
+export async function checkCritiqueLogsExist(): Promise<{ exists: boolean; count: number }> {
+  const res = await axios.get(`${API_BASE}/critique-log-exists`);
+  return res.data;
 }
 
 export type PromptIssueTag =
