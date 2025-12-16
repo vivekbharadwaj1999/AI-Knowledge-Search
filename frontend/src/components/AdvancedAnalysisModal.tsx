@@ -192,6 +192,40 @@ export default function UnifiedAnalysisModal({
   const embeddingModel: string | undefined = queryAnalysis.embedding_model;
   const fullEmbedding: number[] | undefined = data.query_embedding;
   const [showFullEmbedding, setShowFullEmbedding] = useState(false);
+  
+  // Answer Stability controls
+  const [stabilityTemperature, setStabilityTemperature] = useState<number>(0);
+  const [isRecomputing, setIsRecomputing] = useState(false);
+  const [localAnswerStability, setLocalAnswerStability] = useState<any>(data.answer_stability);
+  const [localResultsByMethod, setLocalResultsByMethod] = useState<any>(data.results_by_method);
+  const [stabilityHistory, setStabilityHistory] = useState<Array<{
+    temperature: number;
+    timestamp: string;
+    stability: any;
+    results_by_method: any;
+  }>>([
+    {
+      temperature: 0,
+      timestamp: new Date().toISOString(),
+      stability: data.answer_stability,
+      results_by_method: data.results_by_method
+    }
+  ]);
+
+  const decreaseTemperature = () => setStabilityTemperature((t) => Math.max(0, parseFloat((t - 0.1).toFixed(1))));
+  const increaseTemperature = () => setStabilityTemperature((t) => Math.min(2, parseFloat((t + 0.1).toFixed(1))));
+
+  const handleTemperatureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.trim();
+    if (raw === "") {
+      setStabilityTemperature(0);
+      return;
+    }
+    const parsed = parseFloat(raw);
+    if (!Number.isNaN(parsed)) {
+      setStabilityTemperature(Math.min(2, Math.max(0, parseFloat(parsed.toFixed(1)))));
+    }
+  };
 
   const numericEmbedding =
     showFullEmbedding && Array.isArray(fullEmbedding)
@@ -200,7 +234,16 @@ export default function UnifiedAnalysisModal({
 
   const handleExportJson = () => {
     try {
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
+      // Create enhanced data object with stability history
+      const exportData = {
+        ...data,
+        answer_stability_history: stabilityHistory,
+        answer_stability_current: localAnswerStability,
+        results_by_method_current: localResultsByMethod,
+        answer_stability_current_temperature: stabilityTemperature,
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);
@@ -216,6 +259,59 @@ export default function UnifiedAnalysisModal({
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Failed to export analysis JSON", err);
+    }
+  };
+
+  const handleRecomputeStability = async () => {
+    setIsRecomputing(true);
+    try {
+      // Import analyzeOperation dynamically
+      const { analyzeOperation } = await import("../api");
+      
+      // Build params based on operation type
+      let params: any = {
+        operation: data.operation,
+        top_k: data.input?.top_k || 7,
+        doc_name: data.input?.doc_name,
+        normalize_vectors: true,
+        embedding_model: data.input?.embedding_model,
+        temperature: stabilityTemperature,
+      };
+
+      if (data.operation === "ask") {
+        params.question = data.input?.question;
+        params.model = data.input?.model;
+      } else if (data.operation === "compare") {
+        params.question = data.input?.question;
+        params.models = data.input?.models;
+      } else if (data.operation === "critique") {
+        params.question = data.input?.question;
+        params.answer_model = data.input?.answer_model;
+        params.critic_model = data.input?.critic_model;
+        params.max_rounds = data.input?.self_correct ? 2 : 1;
+      }
+
+      const result = await analyzeOperation(params);
+      
+      // Update current stability and results
+      setLocalAnswerStability(result.answer_stability);
+      setLocalResultsByMethod(result.results_by_method);
+      
+      // Append to history with full results
+      setStabilityHistory(prev => [
+        ...prev,
+        {
+          temperature: stabilityTemperature,
+          timestamp: new Date().toISOString(),
+          stability: result.answer_stability,
+          results_by_method: result.results_by_method
+        }
+      ]);
+    } catch (error) {
+      console.error("Failed to recompute stability:", error);
+      alert("Failed to recompute answer stability. Please try again.");
+    } finally {
+      setIsRecomputing(false);
     }
   };
 
@@ -243,7 +339,7 @@ export default function UnifiedAnalysisModal({
   const chosenMethod = clampMethodKey(selectedMethod);
 
   const renderOperationResults = (method: MethodKey) => {
-    const result = data.results_by_method?.[method];
+    const result = localResultsByMethod?.[method];
     if (!result) return null;
 
     if (operation === "ask") {
@@ -705,7 +801,7 @@ export default function UnifiedAnalysisModal({
                     </p>
                     <div className="space-y-4">
                       {METHODS.map((method) => {
-                        const result = data.results_by_method?.[method];
+                        const result = localResultsByMethod?.[method];
                         if (!result) return null;
 
                         const isSelected = method === chosenMethod;
@@ -822,6 +918,241 @@ export default function UnifiedAnalysisModal({
                       })}
                     </div>
                   </section>
+
+                  {/* Answer Stability Section */}
+                  {data.answer_stability && (
+                    <section className="bg-slate-950/60 border border-slate-800 rounded-lg p-4">
+                      <h3 className="text-sm font-bold text-purple-300 mb-2">
+                        ANSWER STABILITY (EXPERIMENTAL)
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mb-3">
+                        Same LLM, temperature={stabilityTemperature.toFixed(1)}, identical prompt. Only retrieval similarity changed.
+                      </p>
+
+                      {/* Temperature Control */}
+                      <div className="bg-slate-900/40 rounded-lg p-3 mb-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <div className="text-[11px] text-slate-300 font-semibold mb-1">
+                              Temperature Control
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              0 = deterministic, 2 = creative
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-purple-400 font-semibold">
+                            {stabilityHistory.length} experiment{stabilityHistory.length !== 1 ? 's' : ''} in history
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-2 text-xs text-slate-300">
+                            <span className="whitespace-nowrap">Temperature:</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={decreaseTemperature}
+                                className="flex h-7 w-7 items-center justify-center rounded-full
+                                 border border-slate-600 bg-slate-900
+                                 text-xs text-slate-100 hover:bg-slate-800"
+                              >
+                                <span className="text-xl pb-1">–</span>
+                              </button>
+
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={stabilityTemperature.toFixed(1)}
+                                onChange={handleTemperatureChange}
+                                className="w-14 rounded-md border border-slate-700 bg-slate-800
+                                 px-2 py-1 text-xs text-slate-100 text-center
+                                 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={increaseTemperature}
+                                className="flex h-7 w-7 items-center justify-center rounded-full
+                                 border border-slate-600 bg-slate-900
+                                 text-xs text-slate-100 hover:bg-slate-800"
+                              >
+                                <span className="text-xl pb-1">+</span>
+                              </button>
+                            </div>
+                          </label>
+                          <button
+                            onClick={handleRecomputeStability}
+                            disabled={isRecomputing}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-[11px] font-semibold rounded transition-colors"
+                          >
+                            {isRecomputing ? "Recomputing..." : "Recompute"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto space-y-6">
+                        {/* For ASK and CRITIQUE operations */}
+                        {(operation === "ask" || operation === "critique") && localAnswerStability?.[chosenMethod] && (
+                          <div>
+                            {operation === "critique" && (
+                              <div className="text-[10px] text-slate-500 mb-2">
+                                Stability based on final answers after critique rounds
+                              </div>
+                            )}
+                            <table className="w-full text-[11px] border-collapse">
+                              <thead>
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-slate-400 font-semibold border-b border-slate-700">
+                                    Compared to {METHOD_INFO[chosenMethod].name}
+                                  </th>
+                                  <th className="px-3 py-2 text-center text-slate-300 font-semibold border-b border-slate-700">
+                                    Cosine (semantic)
+                                  </th>
+                                  <th className="px-3 py-2 text-center text-slate-300 font-semibold border-b border-slate-700">
+                                    ROUGE-L (lexical)
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {METHODS.map((method) => {
+                                  if (method === chosenMethod) return null;
+                                  
+                                  const stability = localAnswerStability[chosenMethod]?.[method];
+                                  if (!stability) return null;
+
+                                  const semanticScore = Math.round(stability.cosine_semantic * 100);
+                                  const rougeScore = Math.round(stability.rouge_l * 100);
+
+                                  const semanticPill =
+                                    semanticScore >= 90
+                                      ? "bg-emerald-900/50 text-emerald-300"
+                                      : semanticScore >= 75
+                                        ? "bg-sky-900/50 text-sky-300"
+                                        : semanticScore >= 60
+                                          ? "bg-yellow-900/50 text-yellow-300"
+                                          : "bg-rose-900/50 text-rose-300";
+
+                                  const rougePill =
+                                    rougeScore >= 90
+                                      ? "bg-emerald-900/50 text-emerald-300"
+                                      : rougeScore >= 75
+                                        ? "bg-sky-900/50 text-sky-300"
+                                        : rougeScore >= 60
+                                          ? "bg-yellow-900/50 text-yellow-300"
+                                          : "bg-rose-900/50 text-rose-300";
+
+                                  return (
+                                    <tr key={method} className="border-t border-slate-800">
+                                      <td className="px-3 py-2 text-slate-300 font-semibold">
+                                        {METHOD_INFO[method].name}
+                                      </td>
+                                      <td className="px-3 py-2 text-center">
+                                        <span
+                                          className={`inline-block px-2 py-1 rounded text-[10px] font-bold ${semanticPill}`}
+                                        >
+                                          {semanticScore}%
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2 text-center">
+                                        <span
+                                          className={`inline-block px-2 py-1 rounded text-[10px] font-bold ${rougePill}`}
+                                        >
+                                          {rougeScore}%
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* For COMPARE operation - show stability for each model */}
+                        {operation === "compare" && (
+                          <div className="space-y-4">
+                            {Object.keys(localAnswerStability || {}).map((model) => {
+                              const stabilityForModel = localAnswerStability[model];
+                              if (!stabilityForModel || !stabilityForModel[chosenMethod]) return null;
+
+                              return (
+                                <div key={model}>
+                                  <div className="text-[11px] text-violet-300 font-semibold mb-2">
+                                    Model: {model}
+                                  </div>
+                                  <table className="w-full text-[11px] border-collapse">
+                                    <thead>
+                                      <tr>
+                                        <th className="px-3 py-2 text-left text-slate-400 font-semibold border-b border-slate-700">
+                                          Compared to {METHOD_INFO[chosenMethod].name}
+                                        </th>
+                                        <th className="px-3 py-2 text-center text-slate-300 font-semibold border-b border-slate-700">
+                                          Cosine (semantic)
+                                        </th>
+                                        <th className="px-3 py-2 text-center text-slate-300 font-semibold border-b border-slate-700">
+                                          ROUGE-L (lexical)
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {METHODS.map((method) => {
+                                        if (method === chosenMethod) return null;
+                                        
+                                        const stability = stabilityForModel[chosenMethod]?.[method];
+                                        if (!stability) return null;
+
+                                        const semanticScore = Math.round(stability.cosine_semantic * 100);
+                                        const rougeScore = Math.round(stability.rouge_l * 100);
+
+                                        const semanticPill =
+                                          semanticScore >= 90
+                                            ? "bg-emerald-900/50 text-emerald-300"
+                                            : semanticScore >= 75
+                                              ? "bg-sky-900/50 text-sky-300"
+                                              : semanticScore >= 60
+                                                ? "bg-yellow-900/50 text-yellow-300"
+                                                : "bg-rose-900/50 text-rose-300";
+
+                                        const rougePill =
+                                          rougeScore >= 90
+                                            ? "bg-emerald-900/50 text-emerald-300"
+                                            : rougeScore >= 75
+                                              ? "bg-sky-900/50 text-sky-300"
+                                              : rougeScore >= 60
+                                                ? "bg-yellow-900/50 text-yellow-300"
+                                                : "bg-rose-900/50 text-rose-300";
+
+                                        return (
+                                          <tr key={method} className="border-t border-slate-800">
+                                            <td className="px-3 py-2 text-slate-300 font-semibold">
+                                              {METHOD_INFO[method].name}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                              <span
+                                                className={`inline-block px-2 py-1 rounded text-[10px] font-bold ${semanticPill}`}
+                                              >
+                                                {semanticScore}%
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                              <span
+                                                className={`inline-block px-2 py-1 rounded text-[10px] font-bold ${rougePill}`}
+                                              >
+                                                {rougeScore}%
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  )}
                 </div>
               </Dialog.Panel>
             </Transition.Child>

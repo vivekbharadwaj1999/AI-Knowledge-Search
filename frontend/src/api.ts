@@ -262,6 +262,7 @@ export async function analyzeOperation(params: {
   max_rounds?: number;
   normalize_vectors?: boolean;
   embedding_model?: string;  
+  temperature?: number;
 }): Promise<any> {
   const response = await fetch(`${API_BASE}/analyze`, {
     method: "POST",

@@ -1551,45 +1551,44 @@ function App() {
                   </select>
                 </div>
               </div>
+              <div className="mt-4 pt-4 border-slate-800 space-y-2">
+                <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
+                  Self correcting loop
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  When enabled, the system will run up to two critique & repair
+                  rounds: answer → critique → improved prompt → answer again
+                  (logged for research).
+                </p>
 
+                <label className="inline-flex items-center gap-2 text-xs text-slate-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setEnableSelfCorrect(!enableSelfCorrect)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${enableSelfCorrect ? "bg-sky-500" : "bg-slate-600"
+                      }`}
+                    aria-pressed={enableSelfCorrect}
+                    aria-label="Toggle self-correcting critique loop"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${enableSelfCorrect ? "translate-x-4" : "translate-x-1"
+                        }`}
+                    />
+                  </button>
+
+                  <span>Enable self correcting critique loop (max 2 rounds)</span>
+                </label>
+              </div>
               <div className="flex justify-end">
                 <button
                   onClick={handleCritique}
                   disabled={!canCritique}
-                  className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium
+                  className="inline-flex items-center justify-center rounded-lg px-4 py-2 pb-2 text-sm font-medium
                              bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isCritiqueLoading ? "Critiquing…" : "Critique answer & prompt"}
                 </button>
               </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
-              <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase">
-                Self correcting loop
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                When enabled, the system will run up to two critique & repair
-                rounds: answer → critique → improved prompt → answer again
-                (logged for research).
-              </p>
-
-              <label className="inline-flex items-center gap-2 text-xs text-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setEnableSelfCorrect(!enableSelfCorrect)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${enableSelfCorrect ? "bg-sky-500" : "bg-slate-600"
-                    }`}
-                  aria-pressed={enableSelfCorrect}
-                  aria-label="Toggle self-correcting critique loop"
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${enableSelfCorrect ? "translate-x-4" : "translate-x-1"
-                      }`}
-                  />
-                </button>
-
-                <span>Enable self correcting critique loop (max 2 rounds)</span>
-              </label>
             </div>
             <div className="mt-4 pt-6 pb-2 flex flex-col sm:flex-row justify-between gap-2 border-t border-slate-800">
               <button

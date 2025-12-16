@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 from app.config import EmbeddingClient, LLMClient
 from app.vector_store import similarity_search, _load_records, get_document_embedding_model
 from app.critique import run_critique
+from rouge_score import rouge_scorer
 
 
 def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
@@ -36,6 +37,7 @@ def answer_question(
     similarity: Optional[str] = None,
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
+    temperature: Optional[float] = None,
 ):
     """
     Answer a question using the vector store.
@@ -49,6 +51,7 @@ def answer_question(
         normalize_vectors: Whether to normalize vectors
         embedding_model: Embedding model to use. If None and doc_name is provided,
                         uses the model that was used to embed that document.
+        temperature: Temperature for LLM generation
     """
     # Determine which embedding model to use
     if embedding_model is None and doc_name is not None:
@@ -91,7 +94,7 @@ def answer_question(
 
     llm = LLMClient()
     prompt = build_prompt(question, context_for_llm)
-    answer = llm.complete(prompt, model=model)
+    answer = llm.complete(prompt, model=model, temperature=temperature)
 
     plain_chunks = [s["text"] for s in sources]
 
@@ -146,6 +149,60 @@ def calculate_all_similarities(
         "neg_l1": _neg_l1(query_embedding, chunk_embedding),
         "hybrid": 0.7 * cosine + 0.3 * _keyword_overlap(query_text, chunk_text)
     }
+
+
+def calculate_answer_stability(
+    answers_by_method: Dict[str, str],
+    selected_method: str,
+    embedding_model: Optional[str] = None,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Calculate answer stability metrics comparing the selected method's answer
+    to answers from other methods.
+    
+    Returns:
+        Dict mapping each method to {"cosine_semantic": float, "rouge_l": float}
+    """
+    if selected_method not in answers_by_method:
+        return {}
+    
+    selected_answer = answers_by_method[selected_method]
+    
+    # Initialize embedding client for semantic similarity
+    embed_client = EmbeddingClient(model_name=embedding_model)
+    selected_embedding = embed_client.embed_query(selected_answer)
+    
+    # Initialize ROUGE scorer
+    scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+    
+    stability = {}
+    
+    for method, answer in answers_by_method.items():
+        if method == selected_method:
+            # Same method has perfect stability
+            stability[method] = {
+                "cosine_semantic": 1.0,
+                "rouge_l": 1.0
+            }
+            continue
+        
+        # Calculate semantic similarity (cosine between embeddings)
+        other_embedding = embed_client.embed_query(answer)
+        cosine_sim = sum(a * b for a, b in zip(selected_embedding, other_embedding))
+        norm_selected = math.sqrt(sum(x * x for x in selected_embedding))
+        norm_other = math.sqrt(sum(x * x for x in other_embedding))
+        cosine_sim = cosine_sim / (norm_selected * norm_other) if norm_selected and norm_other else 0.0
+        
+        # Calculate ROUGE-L F1 score
+        rouge_scores = scorer.score(selected_answer, answer)
+        rouge_l_f1 = rouge_scores['rougeL'].fmeasure
+        
+        stability[method] = {
+            "cosine_semantic": round(cosine_sim, 4),
+            "rouge_l": round(rouge_l_f1, 4)
+        }
+    
+    return stability
 
 
 def get_chunks_for_all_methods(
@@ -275,6 +332,7 @@ def analyze_ask_with_all_methods(
     model: Optional[str] = None,
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
+    temperature: Optional[float] = None,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
         question, k, doc_name, normalize_vectors=normalize_vectors,
@@ -285,6 +343,7 @@ def analyze_ask_with_all_methods(
 
     llm = LLMClient()
     results_by_method = {}
+    answers_by_method = {}
 
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         chunks = retrieval_data["top_k_by_method"][method]
@@ -297,7 +356,8 @@ def analyze_ask_with_all_methods(
         from app.qa import build_prompt
         prompt = build_prompt(question, context_chunks)
 
-        answer = llm.complete(prompt, model=model)
+        answer = llm.complete(prompt, model=model, temperature=temperature)
+        answers_by_method[method] = answer
 
         results_by_method[method] = {
             "sources": [
@@ -316,6 +376,16 @@ def analyze_ask_with_all_methods(
             "context_used": len(context_chunks)
         }
 
+    # Calculate answer stability for all methods
+    # We'll calculate it for each method as if it were the "selected" one
+    answer_stability_by_method = {}
+    for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
+        answer_stability_by_method[method] = calculate_answer_stability(
+            answers_by_method=answers_by_method,
+            selected_method=method,
+            embedding_model=embedding_model
+        )
+
     return {
         "operation": "ask",
         "input": {
@@ -327,6 +397,7 @@ def analyze_ask_with_all_methods(
         "retrieval_details": retrieval_data["retrieval_details"],
         "results_by_method": results_by_method,
         "query_embedding": retrieval_data.get("query_embedding"),
+        "answer_stability": answer_stability_by_method,
     }
 
 
@@ -337,6 +408,7 @@ def analyze_compare_with_all_methods(
     doc_name: Optional[str] = None,
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
+    temperature: Optional[float] = None,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
         question, k, doc_name, normalize_vectors=normalize_vectors,
@@ -347,6 +419,9 @@ def analyze_compare_with_all_methods(
 
     llm = LLMClient()
     results_by_method = {}
+
+    # Collect answers for each model separately
+    answers_by_model = {model: {} for model in models}
 
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         chunks = retrieval_data["top_k_by_method"][method]
@@ -359,13 +434,15 @@ def analyze_compare_with_all_methods(
         from app.qa import build_prompt
         prompt = build_prompt(question, context_chunks)
 
-        answers_by_model = {}
+        answers_by_model_for_method = {}
         for model in models:
-            answer = llm.complete(prompt, model=model)
-            answers_by_model[model] = {
+            answer = llm.complete(prompt, model=model, temperature=temperature)
+            answers_by_model_for_method[model] = {
                 "answer": answer,
                 "length": len(answer)
             }
+            # Store for stability calculation
+            answers_by_model[model][method] = answer
 
         results_by_method[method] = {
             "sources": [
@@ -379,9 +456,20 @@ def analyze_compare_with_all_methods(
                 }
                 for c in chunks
             ],
-            "answers_by_model": answers_by_model,
+            "answers_by_model": answers_by_model_for_method,
             "context_used": len(context_chunks)
         }
+
+    # Calculate answer stability for each model
+    answer_stability_by_model = {}
+    for model in models:
+        answer_stability_by_model[model] = {}
+        for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
+            answer_stability_by_model[model][method] = calculate_answer_stability(
+                answers_by_method=answers_by_model[model],
+                selected_method=method,
+                embedding_model=embedding_model
+            )
 
     return {
         "operation": "compare",
@@ -394,6 +482,7 @@ def analyze_compare_with_all_methods(
         "retrieval_details": retrieval_data["retrieval_details"],
         "results_by_method": results_by_method,
         "query_embedding": retrieval_data.get("query_embedding"),
+        "answer_stability": answer_stability_by_model,
     }
 
 
@@ -406,6 +495,7 @@ def analyze_critique_with_all_methods(
     self_correct: bool = True,
     normalize_vectors: bool = True,
     embedding_model: Optional[str] = None,
+    temperature: Optional[float] = None,
 ) -> Dict[str, Any]:
     retrieval_data = get_chunks_for_all_methods(
         question, k, doc_name, normalize_vectors=normalize_vectors,
@@ -415,6 +505,7 @@ def analyze_critique_with_all_methods(
         return retrieval_data
 
     results_by_method = {}
+    final_answers_by_method = {}
 
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         critique_result = run_critique(
@@ -426,6 +517,7 @@ def analyze_critique_with_all_methods(
             self_correct=self_correct,
             similarity=method,
             embedding_model=embedding_model,
+            temperature=temperature,
         )
 
         chunks = retrieval_data["top_k_by_method"][method]
@@ -446,6 +538,18 @@ def analyze_critique_with_all_methods(
             "context_used": len(chunks),
         }
 
+        # Collect final answer for stability calculation
+        final_answers_by_method[method] = critique_result.get("answer", "")
+
+    # Calculate answer stability for final answers
+    answer_stability_by_method = {}
+    for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
+        answer_stability_by_method[method] = calculate_answer_stability(
+            answers_by_method=final_answers_by_method,
+            selected_method=method,
+            embedding_model=embedding_model
+        )
+
     return {
         "operation": "critique",
         "input": {
@@ -459,4 +563,5 @@ def analyze_critique_with_all_methods(
         "retrieval_details": retrieval_data["retrieval_details"],
         "results_by_method": results_by_method,
         "query_embedding": retrieval_data.get("query_embedding"),
+        "answer_stability": answer_stability_by_method,
     }
