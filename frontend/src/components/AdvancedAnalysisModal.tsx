@@ -502,13 +502,21 @@ export default function UnifiedAnalysisModal({
               <Dialog.Panel className="w-full max-w-7xl transform overflow-hidden rounded-xl sm:rounded-2xl bg-slate-900 border border-slate-700 p-3 sm:p-6 text-left align-middle shadow-2xl transition-all">
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="min-w-0">
-                    <Dialog.Title className="text-lg sm:text-xl font-bold text-slate-100 flex items-baseline gap-2 whitespace-nowrap">
-                      <span>Advanced Analysis</span>
-                      <span className="text-sm sm:text-base font-normal text-slate-400">
+                    <Dialog.Title
+                      className="
+    text-lg sm:text-xl font-bold text-slate-100
+    flex flex-col sm:flex-row
+    sm:items-baseline
+    gap-0.5 sm:gap-2">
+                      <span className="whitespace-nowrap">Advanced Analysis</span>
+                      <span
+                        className="
+      text-sm sm:text-base font-normal text-slate-400
+      whitespace-nowrap
+      leading-none">
                         ({operation.toUpperCase()})
                       </span>
                     </Dialog.Title>
-
                     <div className="mt-1 text-[11px] sm:text-xs text-slate-400 leading-snug">
                       Comparing how different retrieval methods affect {operation} results
                     </div>
