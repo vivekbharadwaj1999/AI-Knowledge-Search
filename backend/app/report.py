@@ -151,6 +151,8 @@ def generate_document_report(
     *,
     model: Optional[str] = None,
     max_chars: int = MAX_REPORT_SOURCE_CHARS,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> DocumentReport:
     """
     Generate a rich study report for a document.
@@ -158,7 +160,7 @@ def generate_document_report(
     - For smaller documents (len <= max_chars), use the raw text directly.
     - For larger ones, first summarize in chunks, then build the report from the combined summary.
     """
-    full_text = get_document_text(doc_name, max_chars=None)
+    full_text = get_document_text(doc_name, max_chars=None, username=username, is_guest=is_guest)
 
     llm = LLMClient()
 

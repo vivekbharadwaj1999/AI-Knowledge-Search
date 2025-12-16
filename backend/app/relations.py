@@ -71,10 +71,12 @@ def analyze_cross_document_relations(
     min_similarity: float = 0.2,
     similarity: str = "cosine",
     normalize_vectors: bool = True,
+    username: Optional[str] = None,
+    is_guest: bool = False,
 ) -> CrossDocRelations:
 
-    doc_embeddings = get_document_embeddings()
-    doc_previews = get_document_previews()
+    doc_embeddings = get_document_embeddings(username=username, is_guest=is_guest)
+    doc_previews = get_document_previews(username=username, is_guest=is_guest)
 
     docs = list(doc_embeddings.keys())
     if len(docs) < 2:
