@@ -51,6 +51,8 @@ app = FastAPI(title="AI Knowledge Search Engine")
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
+    "http://46.224.82.38",  
+    "http://46.224.82.38:5173", 
 ]
 
 app.add_middleware(

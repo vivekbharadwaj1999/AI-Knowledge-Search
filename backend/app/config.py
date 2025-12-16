@@ -14,7 +14,7 @@ if not GROQ_API_KEY:
         "Create a .env file with GROQ_API_KEY=... or export it before starting the backend."
     )
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")  # Optional, only needed for OpenAI embeddings
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 DEFAULT_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
@@ -142,13 +142,10 @@ class EmbeddingClient:
                     f"OpenAI API key required for model '{self.model_name}'. "
                     "Set OPENAI_API_KEY in your .env file."
                 )
-            # Import OpenAI client only when needed
             from openai import OpenAI
             self.openai_client = OpenAI(api_key=OPENAI_API_KEY)
             self.model = None
         else:
-            # Local sentence-transformers model
-            # Some models (like Alibaba GTE) need trust_remote_code=True
             if "Alibaba-NLP" in self.model_name or "gte-large" in self.model_name:
                 self.model = SentenceTransformer(self.model_name, trust_remote_code=True)
             else:
@@ -165,7 +162,6 @@ class EmbeddingClient:
             return self._embed_local(texts)
     
     def _embed_local(self, texts: List[str]) -> List[List[float]]:
-        """Embed using local sentence-transformers model"""
         embeddings = self.model.encode(
             texts,
             show_progress_bar=False,
@@ -175,8 +171,6 @@ class EmbeddingClient:
         return embeddings.tolist()
     
     def _embed_openai(self, texts: List[str]) -> List[List[float]]:
-        """Embed using OpenAI API"""
-        # OpenAI has a batch limit of 2048 texts per request
         batch_size = 2048
         all_embeddings = []
         
@@ -201,6 +195,5 @@ class EmbeddingClient:
 
 
 def get_embedding_dimension(model_name: str) -> int:
-    """Get the embedding dimension for a given model"""
     model_info = AVAILABLE_EMBEDDING_MODELS.get(model_name, {})
     return model_info.get("dimension", 384)
