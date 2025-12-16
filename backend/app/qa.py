@@ -1,7 +1,7 @@
 import math
 from typing import List, Optional, Dict, Any
 from app.config import EmbeddingClient, LLMClient
-from app.vector_store import similarity_search, _load_records, get_document_embedding_model
+from app.vector_store import similarity_search, _load_records, get_document_embedding_model, get_documents_info
 from app.critique import run_critique
 from rouge_score import rouge_scorer
 
@@ -52,8 +52,16 @@ def answer_question(
                         uses the model that was used to embed that document.
         temperature: Temperature for LLM generation
     """
-    if embedding_model is None and doc_name is not None:
-        embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
+    if embedding_model is None:
+        if doc_name is not None:
+            embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
+        else:
+            docs_info = get_documents_info(username=username, is_guest=is_guest)
+            if docs_info:
+                from collections import Counter
+                models = [d.get('embedding_model') for d in docs_info if d.get('embedding_model')]
+                if models:
+                    embedding_model = Counter(models).most_common(1)[0][0]
     
     embed_client = EmbeddingClient(model_name=embedding_model)
     query_embedding = embed_client.embed_query(question)
@@ -216,8 +224,16 @@ def get_chunks_for_all_methods(
         embedding_model: Embedding model to use. If None and doc_name is provided,
                         uses the model that was used to embed that document.
     """
-    if embedding_model is None and doc_name is not None:
-        embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
+    if embedding_model is None:
+        if doc_name is not None:
+            embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
+        else:
+            docs_info = get_documents_info(username=username, is_guest=is_guest)
+            if docs_info:
+                from collections import Counter
+                models = [d.get('embedding_model') for d in docs_info if d.get('embedding_model')]
+                if models:
+                    embedding_model = Counter(models).most_common(1)[0][0]
     
     embed_client = EmbeddingClient(model_name=embedding_model)
     query_embedding = embed_client.embed_query(query_text)
