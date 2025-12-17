@@ -170,8 +170,8 @@ async def get_embedding_models():
 @app.post("/ingest")
 async def ingest_document(
     file: UploadFile = File(...),
-    chunk_size: int = Form(800),
-    chunk_overlap: int = Form(200),
+    chunk_size: int = Form(1000),
+    chunk_overlap: int = Form(60),
     embedding_model: str = Form("all-MiniLM-L6-v2"),
     authorization: Optional[str] = Header(None),
 ):
