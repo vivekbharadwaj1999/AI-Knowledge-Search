@@ -22,7 +22,7 @@ const steps: Step[] = [
     description:
       "VivBot lets you upload documents, set configurable similarity metrics and Top K, run grounded Q&A, compare LLMs, generate AI reports and insights, and run critique pipelines for research.",
   },
-    {
+  {
     id: "account",
     navLabel: "Guest & Account",
     title: "1. Guest mode & Account management",
@@ -145,7 +145,23 @@ const steps: Step[] = [
       "The output also shows the differences in the correctness, hallucinations, and similarity of the answer from both rounds.",
     ],
   },
-{
+  {
+    id: "logs",
+    navLabel: "Operations logging",
+    title: "9. Operations logging & export",
+    description:
+      "VivBot automatically logs every Ask, Compare, and Critique operation with complete parameter settings for research.",
+    points:[
+        "**Automatic logging**: Every operation (Ask, Compare, Critique) is logged with all parameters: question, models, Top K, similarity metric, document scope, and complete results.",
+        "**Export logs**: Click 'Export logs (JSON)' at the bottom of the operations panel to download all logged operations as a single JSON file.",
+        "**Reset logs**: Click 'Reset logs' to clear all logged operations and start fresh. Requires confirmation to prevent accidental deletion.",
+        "**What gets logged**: Questions, answers, context chunks, sources with similarity scores, model names, retrieval parameters, and for Critique: all rounds, scores, and improvements.",
+        "**Compare logging**: Compare operations are logged as unified entries with both left and right model results, making analysis easier than separate Ask entries.",
+        "**Buttons disabled when empty**: Export and Reset buttons are disabled when no operations have been logged yet.",
+      ]
+    ,
+  },
+  {
     id: "advanced",
     navLabel: "Advanced analysis",
     title: "9. Advanced analysis",

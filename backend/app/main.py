@@ -8,6 +8,9 @@ from pathlib import Path
 from app.schemas import (
     AskRequest,
     AskResponse,
+    CompareRequest,
+    CompareResponse,
+    CompareResult,
     InsightsRequest,
     InsightsResponse,
     ReportRequest,
@@ -43,6 +46,15 @@ from app.auth import (
     get_user_critique_log_path,
     cleanup_guest_data,
     delete_user_account,
+)
+from app.operations_log import (
+    log_ask_operation,
+    log_compare_operation,
+    log_advanced_analysis_operation,
+    log_critique_operation,
+    get_operations_log,
+    reset_operations_log,
+    check_operations_log_exists,
 )
 from fastapi.responses import JSONResponse
 
@@ -170,8 +182,8 @@ async def get_embedding_models():
 @app.post("/ingest")
 async def ingest_document(
     file: UploadFile = File(...),
-    chunk_size: int = Form(1000),
-    chunk_overlap: int = Form(60),
+    chunk_size: int = Form(800),
+    chunk_overlap: int = Form(200),
     embedding_model: str = Form("all-MiniLM-L6-v2"),
     authorization: Optional[str] = Header(None),
 ):
@@ -264,11 +276,106 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
 
     model_used = payload.model or GROQ_MODEL
 
+    # Log the operation
+    log_ask_operation(
+        question=payload.question,
+        answer=answer,
+        context=chunks,
+        sources=sources,
+        top_k=payload.top_k,
+        doc_name=payload.doc_name,
+        model=model_used,
+        similarity=payload.similarity or "cosine",
+        normalize_vectors=payload.normalize_vectors,
+        embedding_model=embedding_model,
+        temperature=None,
+        username=username,
+        is_guest=is_guest,
+    )
+
     return AskResponse(
         answer=answer,
         context=chunks,
         model_used=model_used,
         sources=sources,
+    )
+
+
+@app.post("/compare", response_model=CompareResponse)
+async def compare_route(payload: CompareRequest, authorization: Optional[str] = Header(None)):
+    user_info = await get_current_user_optional(authorization)
+    username = user_info["username"] if user_info else "default"
+    is_guest = user_info.get("is_guest", True) if user_info else True
+
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    embedding_model = getattr(payload, 'embedding_model', None)
+    if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid embedding model: {embedding_model}"
+        )
+
+    # Get answers from both models
+    answer_left, chunks_left, sources_left = answer_question(
+        payload.question,
+        k=payload.top_k,
+        doc_name=payload.doc_name,
+        model=payload.model_left,
+        similarity=payload.similarity,
+        normalize_vectors=payload.normalize_vectors,
+        embedding_model=embedding_model,
+        username=username,
+        is_guest=is_guest,
+    )
+
+    answer_right, chunks_right, sources_right = answer_question(
+        payload.question,
+        k=payload.top_k,
+        doc_name=payload.doc_name,
+        model=payload.model_right,
+        similarity=payload.similarity,
+        normalize_vectors=payload.normalize_vectors,
+        embedding_model=embedding_model,
+        username=username,
+        is_guest=is_guest,
+    )
+
+    # Log the compare operation
+    log_compare_operation(
+        question=payload.question,
+        model_left=payload.model_left,
+        model_right=payload.model_right,
+        answer_left=answer_left,
+        answer_right=answer_right,
+        context_left=chunks_left,
+        context_right=chunks_right,
+        sources_left=sources_left,
+        sources_right=sources_right,
+        top_k=payload.top_k,
+        doc_name=payload.doc_name,
+        similarity=payload.similarity or "cosine",
+        normalize_vectors=payload.normalize_vectors,
+        embedding_model=embedding_model,
+        temperature=None,
+        username=username,
+        is_guest=is_guest,
+    )
+
+    return CompareResponse(
+        left=CompareResult(
+            model=payload.model_left,
+            answer=answer_left,
+            context=chunks_left,
+            sources=sources_left,
+        ),
+        right=CompareResult(
+            model=payload.model_right,
+            answer=answer_right,
+            context=chunks_right,
+            sources=sources_right,
+        ),
     )
 
 
@@ -364,9 +471,36 @@ async def critique_route(payload: CritiqueRequest, authorization: Optional[str] 
         self_correct=payload.self_correct,
         similarity=payload.similarity,
         normalize_vectors=payload.normalize_vectors,
+        embedding_model=payload.embedding_model,
         username=username,
         is_guest=is_guest,
     )
+    
+    # Log to unified operations log
+    log_critique_operation(
+        question=payload.question,
+        answer_model=payload.answer_model,
+        critic_model=data["critic_model"],
+        answer=data["answer"],
+        context=data["context"],
+        sources=data.get("sources", []),
+        answer_critique_markdown=data["answer_critique_markdown"],
+        prompt_feedback_markdown=data["prompt_feedback_markdown"],
+        improved_prompt=data["improved_prompt"],
+        prompt_issue_tags=data["prompt_issue_tags"],
+        scores=data.get("scores"),
+        rounds=data["rounds"],
+        top_k=payload.top_k,
+        doc_name=payload.doc_name,
+        self_correct=payload.self_correct,
+        similarity=payload.similarity or "cosine",
+        normalize_vectors=payload.normalize_vectors,
+        embedding_model=payload.embedding_model,
+        temperature=None,
+        username=username,
+        is_guest=is_guest,
+    )
+    
     return data
 
 
@@ -524,6 +658,23 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             username=username,
             is_guest=is_guest,
         )
+        
+        # Log advanced analysis operation
+        log_advanced_analysis_operation(
+            operation="ask",
+            parameters={
+                "question": question,
+                "top_k": payload.get("top_k", 7),
+                "doc_name": payload.get("doc_name"),
+                "model": payload.get("model"),
+                "normalize_vectors": payload.get("normalize_vectors", True),
+                "embedding_model": embedding_model,
+                "temperature": temperature,
+            },
+            results=result,
+            username=username,
+            is_guest=is_guest,
+        )
 
     elif operation == "compare":
         question = payload.get("question", "").strip()
@@ -543,6 +694,23 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             normalize_vectors=payload.get("normalize_vectors", True),
             embedding_model=embedding_model,
             temperature=temperature,
+            username=username,
+            is_guest=is_guest,
+        )
+        
+        # Log advanced analysis operation
+        log_advanced_analysis_operation(
+            operation="compare",
+            parameters={
+                "question": question,
+                "models": models,
+                "top_k": payload.get("top_k", 7),
+                "doc_name": payload.get("doc_name"),
+                "normalize_vectors": payload.get("normalize_vectors", True),
+                "embedding_model": embedding_model,
+                "temperature": temperature,
+            },
+            results=result,
             username=username,
             is_guest=is_guest,
         )
@@ -576,6 +744,25 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             username=username,
             is_guest=is_guest,
         )
+        
+        # Log advanced analysis operation
+        log_advanced_analysis_operation(
+            operation="critique",
+            parameters={
+                "question": question,
+                "answer_model": answer_model,
+                "critic_model": critic_model,
+                "top_k": payload.get("top_k", 7),
+                "doc_name": payload.get("doc_name"),
+                "self_correct": self_correct,
+                "normalize_vectors": payload.get("normalize_vectors", True),
+                "embedding_model": embedding_model,
+                "temperature": temperature,
+            },
+            results=result,
+            username=username,
+            is_guest=is_guest,
+        )
 
     return {
         "operation": operation,
@@ -593,6 +780,50 @@ async def reset_critique_log_endpoint(authorization: Optional[str] = Header(None
         username, is_guest = "default", True
     reset_critique_log_file(username, is_guest)
     return {"status": "ok", "message": "Critique log reset"}
+
+
+@app.get("/operations-log")
+async def get_operations_log_endpoint(authorization: Optional[str] = Header(None)):
+    """Get all operations log entries for the current user."""
+    user_info = await get_current_user_optional(authorization)
+    if user_info:
+        username, is_guest = user_info["username"], user_info.get("is_guest", True)
+    else:
+        username, is_guest = "default", True
+    
+    entries = get_operations_log(username, is_guest)
+    return {"entries": entries, "count": len(entries)}
+
+
+@app.get("/operations-log-exists")
+async def check_operations_log_exists_endpoint(authorization: Optional[str] = Header(None)):
+    """Check if operations log exists and has entries."""
+    user_info = await get_current_user_optional(authorization)
+    if user_info:
+        username, is_guest = user_info["username"], user_info.get("is_guest", True)
+    else:
+        username, is_guest = "default", True
+    
+    exists = check_operations_log_exists(username, is_guest)
+    
+    if exists:
+        entries = get_operations_log(username, is_guest)
+        return {"exists": True, "count": len(entries)}
+    
+    return {"exists": False, "count": 0}
+
+
+@app.post("/reset-operations-log")
+async def reset_operations_log_endpoint(authorization: Optional[str] = Header(None)):
+    """Reset (delete) the operations log for the current user."""
+    user_info = await get_current_user_optional(authorization)
+    if user_info:
+        username, is_guest = user_info["username"], user_info.get("is_guest", True)
+    else:
+        username, is_guest = "default", True
+    
+    reset_operations_log(username, is_guest)
+    return {"status": "ok", "message": "Operations log reset"}
 
 
 @app.delete("/documents")

@@ -161,6 +161,42 @@ export async function askQuestion(
   return res.data as AskResult;
 }
 
+export type CompareResult = {
+  model: string;
+  answer: string;
+  context: string[];
+  sources: SourceChunk[];
+};
+
+export type CompareResponse = {
+  left: CompareResult;
+  right: CompareResult;
+};
+
+export async function compareModels(
+  question: string,
+  modelLeft: string,
+  modelRight: string,
+  top_k = 5,
+  docName?: string,
+  similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid",
+  normalizeVectors?: boolean,
+  embeddingModel?: string
+): Promise<CompareResponse> {
+  const payload: any = {
+    question,
+    model_left: modelLeft,
+    model_right: modelRight,
+    top_k
+  };
+  if (docName) payload.doc_name = docName;
+  if (similarity) payload.similarity = similarity;
+  if (normalizeVectors !== undefined) payload.normalize_vectors = normalizeVectors;
+  if (embeddingModel) payload.embedding_model = embeddingModel;
+  const res = await axios.post(`${API_BASE}/compare`, payload);
+  return res.data as CompareResponse;
+}
+
 export async function generateInsights(params: {
   question: string;
   answer: string;
@@ -362,5 +398,32 @@ export async function resetCritiqueLog(): Promise<void> {
   });
   if (!res.ok) {
     throw new Error("Failed to reset critique log");
+  }
+}
+
+export interface OperationsLogEntry {
+  operation: string;
+  timestamp: string;
+  parameters: Record<string, any>;
+  results: Record<string, any>;
+}
+
+export async function fetchOperationsLog(): Promise<OperationsLogEntry[]> {
+  const res = await axios.get(`${API_BASE}/operations-log`);
+  return res.data.entries || [];
+}
+
+export async function checkOperationsLogExists(): Promise<{ exists: boolean; count: number }> {
+  const res = await axios.get(`${API_BASE}/operations-log-exists`);
+  return res.data;
+}
+
+export async function resetOperationsLog(): Promise<void> {
+  const res = await fetch(`${API_BASE}/reset-operations-log`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error("Failed to reset operations log");
   }
 }

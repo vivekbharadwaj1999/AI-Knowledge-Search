@@ -21,6 +21,26 @@ class AskResponse(BaseModel):
     model_used: str
     sources: List[SourceChunk] = []
 
+class CompareRequest(BaseModel):
+    question: str
+    model_left: str
+    model_right: str
+    top_k: int = 5
+    doc_name: Optional[str] = None
+    similarity: Optional[str] = None
+    normalize_vectors: bool = True
+    embedding_model: Optional[str] = None
+
+class CompareResult(BaseModel):
+    model: str
+    answer: str
+    context: List[str]
+    sources: List[SourceChunk] = []
+
+class CompareResponse(BaseModel):
+    left: CompareResult
+    right: CompareResult
+
 class InsightsRequest(BaseModel):
     question: str
     answer: str
