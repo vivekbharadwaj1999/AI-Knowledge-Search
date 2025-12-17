@@ -37,6 +37,7 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
 
       onSuccess(data.token, data.username, data.is_guest);
       handleClose();
+      window.location.reload();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || "Authentication failed");
     } finally {

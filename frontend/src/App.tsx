@@ -15,6 +15,7 @@ import {
   clearDocuments,
   generateReport,
   askQuestion,
+  compareModels,
   generateInsights,
   fetchDocumentRelations,
   runCritique,
@@ -22,9 +23,6 @@ import {
   type PromptIssueTag,
   type CritiqueScores,
   type CritiqueRound,
-  fetchCritiqueLogRows,
-  checkCritiqueLogsExist,
-  resetCritiqueLog,
   analyzeOperation,
   setAuthToken,
   getAuthToken,
@@ -32,6 +30,9 @@ import {
   getCurrentUser,
   logout,
   deleteAccount,
+  fetchOperationsLog,
+  checkOperationsLogExists,
+  resetOperationsLog,
 } from "./api";
 
 
@@ -699,7 +700,7 @@ function App() {
   const [enableSelfCorrect, setEnableSelfCorrect] = useState(false);
   const [similarityMetric, setSimilarityMetric] = useState<SimilarityMetric>("cosine");
   const [normalizeVectors, setNormalizeVectors] = useState(true);
-  const [hasCritiqueLogs, setHasCritiqueLogs] = useState(false);
+  const [hasOperationsLog, setHasOperationsLog] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [mobileView, setMobileView] = useState<"operations" | "output">(
     "operations"
@@ -769,10 +770,10 @@ function App() {
   useEffect(() => {
     async function checkExistingLogs() {
       try {
-        const result = await checkCritiqueLogsExist();
-        setHasCritiqueLogs(result.exists);
+        const opsResult = await checkOperationsLogExists();
+        setHasOperationsLog(opsResult.exists);
       } catch (err) {
-        console.error("Failed to check critique logs", err);
+        console.error("Failed to check logs", err);
       }
     }
 
@@ -852,21 +853,6 @@ function App() {
     }
   };
 
-  const handleResetCritiqueLog = async () => {
-    if (!window.confirm("Are you sure? This will permanently delete all logged critique runs.")) {
-      return;
-    }
-
-    try {
-      await resetCritiqueLog();
-      setHasCritiqueLogs(false);
-      alert("Critique log reset successfully.");
-    } catch (err) {
-      console.error("Failed to reset log", err);
-      alert("Failed to reset log. Check console for details.");
-    }
-  };
-
   const canAsk = question.trim().length > 0 && !isLoading;
 
   const handleAsk = async () => {
@@ -901,6 +887,7 @@ function App() {
 
       setMessages([...messages, newMessage]);
       appendOutput({ kind: "ask", messageId: nextId });
+      setHasOperationsLog(true);
 
       setQuestion("");
     } catch (err) {
@@ -986,10 +973,15 @@ function App() {
     const trimmed = compareQuestion.trim();
 
     try {
-      const [leftRes, rightRes] = await Promise.all([
-        askQuestion(trimmed, topK, selectedDoc, modelLeft, similarityMetric, normalizeVectors),
-        askQuestion(trimmed, topK, selectedDoc, modelRight, similarityMetric, normalizeVectors),
-      ]);
+      const result = await compareModels(
+        trimmed,
+        modelLeft,
+        modelRight,
+        topK,
+        useAllDocs ? undefined : selectedDoc,
+        similarityMetric,
+        normalizeVectors
+      );
 
       const nextId = comparisons.length
         ? comparisons[comparisons.length - 1].id + 1
@@ -999,21 +991,22 @@ function App() {
         id: nextId,
         question: trimmed,
         left: {
-          model: leftRes.model_used || modelLeft,
-          answer: leftRes.answer,
-          context: leftRes.context,
-          sources: (leftRes.sources || []) as SourceChunk[],
+          model: result.left.model,
+          answer: result.left.answer,
+          context: result.left.context,
+          sources: result.left.sources as SourceChunk[],
         },
         right: {
-          model: rightRes.model_used || modelRight,
-          answer: rightRes.answer,
-          context: rightRes.context,
-          sources: (rightRes.sources || []) as SourceChunk[],
+          model: result.right.model,
+          answer: result.right.answer,
+          context: result.right.context,
+          sources: result.right.sources as SourceChunk[],
         },
       };
 
       setComparisons([...comparisons, newComparison]);
       appendOutput({ kind: "compare", comparisonId: nextId });
+      setHasOperationsLog(true);
 
       setCompareQuestion("");
     } catch (err) {
@@ -1052,7 +1045,7 @@ function App() {
 
       setCritiques((prev) => [...prev, run]);
       appendOutput({ kind: "critique", critiqueId: nextId });
-      setHasCritiqueLogs(true);
+      setHasOperationsLog(true);
 
     } catch (err) {
       console.error("Critique failed", err);
@@ -1062,64 +1055,45 @@ function App() {
     }
   };
 
-  const handleExportCritiqueLog = async () => {
+  const handleExportOperationsLog = async () => {
     try {
-      const rows = await fetchCritiqueLogRows();
-      setHasCritiqueLogs(rows.length > 0);
+      const entries = await fetchOperationsLog();
+      setHasOperationsLog(entries.length > 0);
 
-      if (!rows.length) {
-        alert("No critique runs logged yet.");
+      if (!entries.length) {
+        alert("No operations logged yet.");
         return;
       }
 
-      const headers = [
-        "timestamp",
-        "question",
-        "answer_model",
-        "critic_model",
-        "doc_name",
-        "self_correct",
-        "similarity",
-        "num_rounds",
-        "r1_correctness",
-        "rN_correctness",
-        "r1_hallucination",
-        "rN_hallucination",
-        "delta_correctness",
-        "delta_hallucination",
-      ] as const;
-
-      type HeaderKey = (typeof headers)[number];
-
-      const headerLine = headers.join(",");
-
-      const lines = rows.map((row) =>
-        headers
-          .map((h: HeaderKey) => {
-            const v = (row as any)[h];
-            if (v === null || v === undefined) return "";
-            const s = String(v);
-            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-          })
-          .join(","),
-      );
-
-      const csv = [headerLine, ...lines].join("\n");
-
-      const blob = new Blob([csv], {
-        type: "text/csv;charset=utf-8;",
+      const json = JSON.stringify(entries, null, 2);
+      const blob = new Blob([json], {
+        type: "application/json;charset=utf-8;",
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "critique_log.csv");
+      link.setAttribute("download", "vivbot_logs.json");
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error("Failed to export critique log", err);
-      alert("Failed to export critique log. Check console for details.");
+      console.error("Failed to export operations log", err);
+      alert("Failed to export logs. Check console for details.");
+    }
+  };
+
+  const handleResetOperationsLog = async () => {
+    if (!confirm("Are you sure you want to delete all logs? This cannot be undone.")) {
+      return;
+    }
+    try {
+      await resetOperationsLog();
+      setHasOperationsLog(false);
+      alert("Logs reset successfully.");
+    } catch (err) {
+      console.error("Failed to reset operations log", err);
+      alert("Failed to reset logs. Check console for details.");
     }
   };
 
@@ -1195,6 +1169,7 @@ function App() {
         selectedMethod: msg.similarity || "cosine",
       });
       setAnalysisModalOpen(true);
+      setHasOperationsLog(true);
     } catch (error) {
       console.error("Analysis failed:", error);
       alert("Failed to run advanced analysis. Please try again.");
@@ -1226,6 +1201,7 @@ function App() {
         selectedMethod: similarityMetric || "cosine",
       });
       setAnalysisModalOpen(true);
+      setHasOperationsLog(true);
     } catch (error) {
       console.error("Compare analysis failed:", error);
       alert("Failed to run advanced analysis. Please try again.");
@@ -1259,6 +1235,7 @@ function App() {
         selectedMethod: similarityMetric || "cosine",
       });
       setAnalysisModalOpen(true);
+      setHasOperationsLog(true);
     } catch (error) {
       console.error("Critique analysis failed:", error);
       alert("Failed to run advanced analysis. Please try again.");
@@ -1695,22 +1672,22 @@ function App() {
             <div className="mt-4 pt-6 pb-2 flex flex-col sm:flex-row justify-between gap-2 border-t border-slate-800">
               <button
                 type="button"
-                onClick={handleExportCritiqueLog}
-                disabled={!hasCritiqueLogs}
+                onClick={handleExportOperationsLog}
+                disabled={!hasOperationsLog}
                 className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-medium
-             border border-slate-600 text-slate-200 bg-slate-900 hover:bg-slate-800
+             border border-emerald-600 text-emerald-200 bg-slate-900 hover:bg-emerald-800/40
              disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Export critique logs (CSV)
+                Export logs (JSON)
               </button>
               <button
                 type="button"
-                onClick={handleResetCritiqueLog}
-                disabled={!hasCritiqueLogs}
+                onClick={handleResetOperationsLog}
+                disabled={!hasOperationsLog}
                 className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-medium
                border border-rose-600 text-rose-200 bg-slate-900 hover:bg-rose-800/40
                disabled:opacity-50 disabled:cursor-not-allowed">
-                Reset critique logs
+                Reset logs
               </button>
             </div>
 
@@ -1993,7 +1970,7 @@ function App() {
                                             {chunks.map((c, idx) => (
                                               <pre
                                                 key={docName + idx}
-                                                className="whitespace-pre-wrap border-b border-slate-200 last:border-none py-2"
+                                                className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
                                               >
                                                 {renderHighlightedChunk(
                                                   c,
@@ -2009,7 +1986,7 @@ function App() {
                                       msg.context.map((c, idx) => (
                                         <pre
                                           key={idx}
-                                          className="whitespace-pre-wrap border-b border-slate-200 last:border-none py-2"
+                                          className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
                                         >
                                           {renderHighlightedChunk(
                                             c,
