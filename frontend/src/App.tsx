@@ -1993,7 +1993,7 @@ function App() {
                                             {chunks.map((c, idx) => (
                                               <pre
                                                 key={docName + idx}
-                                                className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                                                className="whitespace-pre-wrap border-b border-slate-200 last:border-none py-2"
                                               >
                                                 {renderHighlightedChunk(
                                                   c,
@@ -2009,7 +2009,7 @@ function App() {
                                       msg.context.map((c, idx) => (
                                         <pre
                                           key={idx}
-                                          className="whitespace-pre-wrap border-b border-slate-800 last:border-none pb-1"
+                                          className="whitespace-pre-wrap border-b border-slate-200 last:border-none py-2"
                                         >
                                           {renderHighlightedChunk(
                                             c,
