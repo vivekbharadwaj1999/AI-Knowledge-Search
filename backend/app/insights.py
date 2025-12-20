@@ -1,6 +1,5 @@
 import json
 from typing import Any, Dict, List, Optional
-
 from app.config import LLMClient
 
 def _build_insights_prompt(question: str, answer: str, context: List[str]) -> str:

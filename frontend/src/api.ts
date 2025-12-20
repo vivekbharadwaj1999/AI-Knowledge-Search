@@ -428,7 +428,6 @@ export async function resetOperationsLog(): Promise<void> {
   }
 }
 
-// Batch Evaluation API
 export async function runBatchEvaluation(params: {
   questions?: string[];
   question_count?: number;
@@ -486,7 +485,6 @@ export async function exportBatchResults(params: {
   return response.json();
 }
 
-// Counterfactual Analysis API
 export async function runCounterfactualAnalysis(params: {
   question: string;
   original_chunks: any[];

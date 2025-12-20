@@ -42,20 +42,6 @@ def answer_question(
     username: Optional[str] = None,
     is_guest: bool = False,
 ):
-    """
-    Answer a question using the vector store.
-    
-    Args:
-        question: The question to answer
-        k: Number of top chunks to retrieve
-        doc_name: Optional document name to filter by
-        model: LLM model to use for answering
-        similarity: Similarity metric to use
-        normalize_vectors: Whether to normalize vectors
-        embedding_model: Embedding model to use. If None and doc_name is provided,
-                        uses the model that was used to embed that document.
-        temperature: Temperature for LLM generation
-    """
     if embedding_model is None:
         if doc_name is not None:
             embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
@@ -165,23 +151,13 @@ def calculate_answer_stability(
     selected_method: str,
     embedding_model: Optional[str] = None,
 ) -> Dict[str, Dict[str, float]]:
-    """
-    Calculate answer stability metrics comparing the selected method's answer
-    to answers from other methods.
-    
-    Returns:
-        Dict mapping each method to {"cosine_semantic": float, "rouge_l": float}
-    """
     if selected_method not in answers_by_method:
         return {}
     
     selected_answer = answers_by_method[selected_method]
-    
     embed_client = EmbeddingClient(model_name=embedding_model)
     selected_embedding = embed_client.embed_query(selected_answer)
-    
     scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
-    
     stability = {}
     
     for method, answer in answers_by_method.items():
@@ -217,17 +193,6 @@ def get_chunks_for_all_methods(
     username: Optional[str] = None,
     is_guest: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Get chunks using all similarity methods.
-    
-    Args:
-        query_text: The query text
-        k: Number of top chunks to retrieve
-        doc_name: Optional document name to filter by
-        normalize_vectors: Whether to normalize vectors
-        embedding_model: Embedding model to use. If None and doc_name is provided,
-                        uses the model that was used to embed that document.
-    """
     if embedding_model is None:
         if doc_name is not None:
             embedding_model = get_document_embedding_model(doc_name, username=username, is_guest=is_guest)
@@ -395,7 +360,6 @@ def analyze_ask_with_all_methods(
             "context_used": len(context_chunks)
         }
 
-    # Add extended metrics (faithfulness and retrieval quality)
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         answer = results_by_method[method]["answer"]
         chunks = results_by_method[method]["sources"]
@@ -493,7 +457,6 @@ def analyze_compare_with_all_methods(
             "context_used": len(context_chunks)
         }
 
-    # Add extended metrics for each method and model
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         chunks = results_by_method[method]["sources"]
         results_by_method[method]["extended_metrics_by_model"] = {}
@@ -594,7 +557,6 @@ def analyze_critique_with_all_methods(
 
         final_answers_by_method[method] = critique_result.get("answer", "")
 
-    # Add extended metrics
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         answer = final_answers_by_method[method]
         chunks = results_by_method[method]["sources"]

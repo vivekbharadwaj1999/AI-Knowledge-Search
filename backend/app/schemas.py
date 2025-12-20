@@ -79,23 +79,16 @@ class KnowledgeGraphEdge(BaseModel):
 class DocumentReport(BaseModel):
     doc_name: str
     title: Optional[str] = None
-
     executive_summary: str
     sections: List[ReportSection]
-
     key_concepts: List[str]
     concept_explanations: List[str]
-
     relationships: List[str]
     knowledge_graph: List[KnowledgeGraphEdge]
-
     practice_questions: List[QAItem]
-
     difficulty_level: str
     difficulty_explanation: str
-
     study_path: List[str]
-
     explain_like_im_5: str
     cheat_sheet: List[str]
 

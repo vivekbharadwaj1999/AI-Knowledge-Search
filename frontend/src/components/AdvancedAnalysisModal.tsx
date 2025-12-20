@@ -192,12 +192,8 @@ export default function UnifiedAnalysisModal({
   const embeddingModel: string | undefined = queryAnalysis.embedding_model;
   const fullEmbedding: number[] | undefined = data.query_embedding;
   const [showFullEmbedding, setShowFullEmbedding] = useState(false);
-
-  // Counterfactual analysis state
   const [counterfactualResult, setCounterfactualResult] = useState<any>(null);
   const [isRunningCounterfactual, setIsRunningCounterfactual] = useState(false);
-
-  // Answer Stability controls
   const [stabilityTemperature, setStabilityTemperature] = useState<number>(0);
   const [isRecomputing, setIsRecomputing] = useState(false);
   const [localAnswerStability, setLocalAnswerStability] = useState<any>(data.answer_stability);
@@ -238,14 +234,13 @@ export default function UnifiedAnalysisModal({
 
   const handleExportJson = () => {
     try {
-      // Create enhanced data object with stability history and counterfactual results
       const exportData = {
         ...data,
         answer_stability_history: stabilityHistory,
         answer_stability_current: localAnswerStability,
         results_by_method_current: localResultsByMethod,
         answer_stability_current_temperature: stabilityTemperature,
-        counterfactual_results: counterfactualResult, // ✅ NEW: Include counterfactual analysis
+        counterfactual_results: counterfactualResult,
       };
 
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -270,10 +265,7 @@ export default function UnifiedAnalysisModal({
   const handleRecomputeStability = async () => {
     setIsRecomputing(true);
     try {
-      // Import analyzeOperation dynamically
       const { analyzeOperation } = await import("../api");
-
-      // Build params based on operation type
       let params: any = {
         operation: data.operation,
         top_k: data.input?.top_k || 7,
@@ -297,12 +289,8 @@ export default function UnifiedAnalysisModal({
       }
 
       const result = await analyzeOperation(params);
-
-      // Update current stability and results
       setLocalAnswerStability(result.answer_stability);
       setLocalResultsByMethod(result.results_by_method);
-
-      // Append to history with full results
       setStabilityHistory(prev => [
         ...prev,
         {
@@ -325,40 +313,30 @@ export default function UnifiedAnalysisModal({
     setCounterfactualResult(null);
     
     try {
-      // Import the API function
       const { runCounterfactualAnalysis } = await import("../api");
-      
-      // Determine which models to run counterfactual for
       let modelsToTest: string[] = [];
       
       if (operation === "ask") {
         modelsToTest = [data.input.model];
       } else if (operation === "compare") {
-        // For Compare: Test BOTH models
         modelsToTest = data.input.models || [];
       } else if (operation === "critique") {
-        // For Critique: Use answer_model (final answer after critique)
         modelsToTest = [data.input.answer_model];
       }
-      
-      // Run counterfactual for ALL similarity methods and ALL models
+
       const resultsPromises = METHODS.flatMap(method => 
         modelsToTest.map(async (model) => {
           const methodData = localResultsByMethod?.[method];
           if (!methodData) return { method, model, result: null };
 
           try {
-            // For Critique, get the final answer (after all rounds)
             let answerToUse = methodData.answer;
             if (operation === "critique" && methodData.critique_result) {
               const rounds = methodData.critique_result.rounds || [];
               if (rounds.length > 0) {
-                // Use the last round's answer (final version)
                 answerToUse = rounds[rounds.length - 1].answer;
               }
             }
-            
-            // For Compare, get the specific model's answer
             if (operation === "compare" && methodData.answers_by_model) {
               answerToUse = methodData.answers_by_model[model]?.answer || answerToUse;
             }
@@ -373,7 +351,7 @@ export default function UnifiedAnalysisModal({
               similarity: method,
               embedding_model: data.input.embedding_model,
               temperature: stabilityTemperature,
-              original_answer: answerToUse  // Pass the correct answer
+              original_answer: answerToUse  
             });
             
             return { method, model, result };
@@ -385,8 +363,6 @@ export default function UnifiedAnalysisModal({
       );
 
       const allResults = await Promise.all(resultsPromises);
-      
-      // Organize results by method and model
       const resultsByMethod: any = {};
       const metricsByMethod: any = {};
       
@@ -396,8 +372,6 @@ export default function UnifiedAnalysisModal({
             resultsByMethod[method] = {};
             metricsByMethod[method] = {};
           }
-          
-          // For Compare, store per model
           if (operation === "compare") {
             if (!resultsByMethod[method].by_model) {
               resultsByMethod[method].by_model = {};
@@ -411,7 +385,6 @@ export default function UnifiedAnalysisModal({
             };
             metricsByMethod[method].by_model[model] = result.metrics;
           } else {
-            // For Ask and Critique, single model
             resultsByMethod[method] = {
               answer: result.counterfactual_answer,
               original_answer: result.original_answer,
@@ -458,7 +431,7 @@ export default function UnifiedAnalysisModal({
   }, [pinnedKey]);
 
   const operation: "ask" | "compare" | "critique" =
-    data.operation || "ask"; // safe fallback
+    data.operation || "ask"; 
   const chosenMethod = clampMethodKey(selectedMethod);
 
   const renderMetricsForMethod = (methodData: any) => {
@@ -466,14 +439,11 @@ export default function UnifiedAnalysisModal({
 
     return (
       <div className="mt-3 space-y-3">
-        {/* Faithfulness Metrics */}
         {methodData.extended_metrics.faithfulness && (
           <div className="bg-slate-950/40 border border-slate-800/50 rounded-lg p-3">
             <div className="text-[10px] font-semibold text-violet-300 mb-2 uppercase">
               Faithfulness & Groundedness
             </div>
-
-            {/* Overview Metrics */}
             <div className="grid grid-cols-3 gap-2 mb-3">
               <div className="bg-slate-800/40 rounded p-2">
                 <div className="text-[9px] text-slate-400 mb-1">Evidence Coverage</div>
@@ -506,7 +476,6 @@ export default function UnifiedAnalysisModal({
               </div>
             </div>
 
-            {/* Sentence-level Support */}
             <div className="bg-slate-900/60 rounded-lg p-2">
               <div className="text-[9px] font-semibold text-slate-300 mb-2 uppercase">
                 Sentence-level Evidence Support
@@ -535,20 +504,17 @@ export default function UnifiedAnalysisModal({
                           {s.sentence}
                         </div>
                         <div className="flex items-center gap-3 text-[8px] text-slate-400">
-                          {/* Overall Confidence */}
                           <span className="font-semibold">
                             Confidence: {Math.round(s.confidence * 100)}%
                           </span>
-                          
-                          {/* Lexical & Semantic Breakdown */}
+
                           {(s.confidence_lexical > 0 || s.confidence_semantic > 0) && (
                             <span className="text-[7px] text-slate-500">
                               (Lexical: {Math.round((s.confidence_lexical || 0) * 100)}% • 
                               Semantic: {Math.round((s.confidence_semantic || 0) * 100)}%)
                             </span>
                           )}
-                          
-                          {/* Supporting Chunks */}
+
                           {s.supporting_chunks && s.supporting_chunks.length > 0 && (
                             <span>
                               • Chunks: {s.supporting_chunks.map((c: any) => `#${c.chunk_id + 1}`).join(", ")}
@@ -562,7 +528,6 @@ export default function UnifiedAnalysisModal({
               </div>
             </div>
 
-            {/* Extracted Quotes */}
             {methodData.extended_metrics.faithfulness.extracted_quotes && methodData.extended_metrics.faithfulness.extracted_quotes.length > 0 && (
               <div className="bg-sky-950/30 border border-sky-900/50 rounded-lg p-2 mt-2">
                 <div className="text-[9px] font-semibold text-sky-300 mb-1.5 uppercase">
@@ -580,7 +545,6 @@ export default function UnifiedAnalysisModal({
           </div>
         )}
 
-        {/* Retrieval Quality Metrics */}
         {methodData.extended_metrics.retrieval_quality && (
           <div className="bg-slate-950/40 border border-slate-800/50 rounded-lg p-3">
             <div className="text-[10px] font-semibold text-amber-300 mb-2 uppercase">
@@ -675,8 +639,7 @@ export default function UnifiedAnalysisModal({
               )
             )}
           </div>
-          
-          {/* Show metrics for each model separately */}
+
           {result.extended_metrics_by_model && (
             <div className="mt-3 space-y-4">
               {Object.entries(result.extended_metrics_by_model).map(
@@ -1479,9 +1442,6 @@ export default function UnifiedAnalysisModal({
                     </section>
                   )}
 
-                  {/* Metrics now shown per-method above - no duplicate sections needed */}
-
-                  {/* Counterfactual Retrieval Section */}
                   <section className="bg-slate-950/60 border border-slate-800 rounded-lg p-4">
                     <h3 className="text-sm font-bold text-rose-300 mb-2">
                       COUNTERFACTUAL RETRIEVAL (STRESS TESTING)
@@ -1526,22 +1486,15 @@ export default function UnifiedAnalysisModal({
                     
                     {counterfactualResult && (
                       <div className="space-y-4">
-                        {/* Overall Result Header */}
                         <div className="bg-slate-900/60 rounded-lg p-3">
                           <div className="text-[11px] font-semibold text-slate-300 uppercase">
                             Result: {counterfactualResult.counterfactual_type.replace(/_/g, " ")}
                           </div>
                         </div>
-
-                        {/* Results for Each Similarity Method */}
                         {METHODS.map((method) => {
                           const methodData = counterfactualResult.results_by_method?.[method];
                           if (!methodData) return null;
-
-                          // Check if this is Compare (has by_model structure)
                           const isCompare = counterfactualResult.operation === "compare" && methodData.by_model;
-                          
-                          // Helper function to render a single result
                           const renderResult = (data: any, metrics: any, modelName?: string) => {
                             const originalChunks = data.original_sources || [];
                             const counterfactualChunks = data.sources || [];
@@ -1553,10 +1506,8 @@ export default function UnifiedAnalysisModal({
                                     {modelName}
                                   </div>
                                 )}
-                                
-                                {/* Metrics - Grouped Layout */}
+
                                 <div className="grid grid-cols-3 gap-2 mb-3">
-                                  {/* Answer Similarity - All 3 metrics grouped */}
                                   <div className="bg-slate-800/40 rounded p-2">
                                     <div className="text-[8px] text-slate-400 mb-2 font-semibold">Answer Similarity</div>
                                     <div className="flex gap-3 items-center">
@@ -1593,15 +1544,13 @@ export default function UnifiedAnalysisModal({
                                     </div>
                                   </div>
 
-                                  {/* Chunk Overlap */}
                                   <div className="bg-slate-800/40 rounded p-2">
                                     <div className="text-[8px] text-slate-400 mb-1">Chunk Overlap</div>
                                     <div className="text-sm font-bold text-violet-400">
                                       {((metrics?.chunk_overlap || 0) * 100).toFixed(1)}%
                                     </div>
                                   </div>
-                                  
-                                  {/* Dependence */}
+
                                   <div className="bg-slate-800/40 rounded p-2">
                                     <div className="text-[8px] text-slate-400 mb-1">Dependence</div>
                                     <div className={`text-sm font-bold ${
@@ -1617,17 +1566,14 @@ export default function UnifiedAnalysisModal({
                                 {metrics?.answer_collapsed && (
                                   <div className="bg-rose-950/30 border border-rose-900/50 rounded p-2 mb-3">
                                     <div className="text-[9px] text-rose-300 font-semibold">
-                                      ⚠️ Answer Collapsed - Strong retrieval dependence!
+                                      Answer Collapsed - Strong retrieval dependence
                                     </div>
                                   </div>
                                 )}
 
                                 <div className="grid grid-cols-2 gap-3">
-                                {/* Original Answer with Chunk Pills */}
                                 <div>
                                   <div className="text-[9px] text-slate-400 mb-2">Original Chunks & Answer</div>
-                                  
-                                  {/* Chunk Pills */}
                                   <div className="flex flex-wrap gap-1 mb-2">
                                     {originalChunks.map((chunk: any, idx: number) => (
                                       <div
@@ -1646,20 +1592,16 @@ export default function UnifiedAnalysisModal({
                                     {data.original_answer || "N/A"}
                                   </div>
                                 </div>
-                                
-                                {/* Counterfactual Answer with Chunk Pills */}
+
                                 <div>
                                   <div className="text-[9px] text-slate-400 mb-2">Counterfactual Chunks & Answer</div>
-                                  
-                                  {/* Chunk Pills */}
                                   <div className="flex flex-wrap gap-1 mb-2">
                                     {counterfactualChunks.map((chunk: any, idx: number) => {
-                                      // Calculate the original index based on counterfactual type
                                       let originalIdx = idx;
                                       if (counterfactualResult.counterfactual_type === "remove_top") {
-                                        originalIdx = idx + 1; // Skipped first chunk
+                                        originalIdx = idx + 1; 
                                       } else if (counterfactualResult.counterfactual_type === "remove_top_3") {
-                                        originalIdx = idx + 3; // Skipped first 3 chunks
+                                        originalIdx = idx + 3; 
                                       } else if (counterfactualResult.counterfactual_type === "reverse_order") {
                                         originalIdx = originalChunks.length - 1 - idx;
                                       } else if (counterfactualResult.counterfactual_type === "random") {
@@ -1691,14 +1633,10 @@ export default function UnifiedAnalysisModal({
 
                           return (
                             <div key={method} className="bg-slate-900/60 rounded-lg p-3">
-                              {/* Method Header */}
                               <div className={`text-[11px] font-semibold ${METHOD_STYLES[method].titleText} mb-3 uppercase`}>
                                 {METHOD_INFO[method].name}
                               </div>
-
-                              {/* Render results - either single model or multiple models */}
                               {isCompare ? (
-                                // Compare: Show results for each model
                                 <div className="space-y-4">
                                   {Object.entries(methodData.by_model).map(([modelName, modelData]: [string, any]) => {
                                     const modelMetrics = counterfactualResult.metrics_by_method?.[method]?.by_model?.[modelName];
@@ -1710,7 +1648,6 @@ export default function UnifiedAnalysisModal({
                                   })}
                                 </div>
                               ) : (
-                                // Ask/Critique: Single model
                                 renderResult(methodData, counterfactualResult.metrics_by_method?.[method])
                               )}
                             </div>

@@ -86,7 +86,7 @@ async def get_current_user_optional(authorization: Optional[str] = Header(None))
     if not authorization.startswith("Bearer "):
         return None
 
-    token = authorization[7:]  # Remove "Bearer " prefix
+    token = authorization[7:] 
     user_data = decode_token(token)
     return user_data
 
@@ -277,7 +277,6 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
 
     model_used = payload.model or GROQ_MODEL
 
-    # Log the operation
     log_ask_operation(
         question=payload.question,
         answer=answer,
@@ -318,7 +317,6 @@ async def compare_route(payload: CompareRequest, authorization: Optional[str] = 
             detail=f"Invalid embedding model: {embedding_model}"
         )
 
-    # Get answers from both models
     answer_left, chunks_left, sources_left = answer_question(
         payload.question,
         k=payload.top_k,
@@ -343,7 +341,6 @@ async def compare_route(payload: CompareRequest, authorization: Optional[str] = 
         is_guest=is_guest,
     )
 
-    # Log the compare operation
     log_compare_operation(
         question=payload.question,
         model_left=payload.model_left,
@@ -476,8 +473,7 @@ async def critique_route(payload: CritiqueRequest, authorization: Optional[str] 
         username=username,
         is_guest=is_guest,
     )
-    
-    # Log to unified operations log
+
     log_critique_operation(
         question=payload.question,
         answer_model=payload.answer_model,
@@ -659,8 +655,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             username=username,
             is_guest=is_guest,
         )
-        
-        # Log advanced analysis operation
+
         log_advanced_analysis_operation(
             operation="ask",
             parameters={
@@ -698,8 +693,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             username=username,
             is_guest=is_guest,
         )
-        
-        # Log advanced analysis operation
+
         log_advanced_analysis_operation(
             operation="compare",
             parameters={
@@ -745,8 +739,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             username=username,
             is_guest=is_guest,
         )
-        
-        # Log advanced analysis operation
+
         log_advanced_analysis_operation(
             operation="critique",
             parameters={
@@ -859,8 +852,6 @@ async def run_batch_evaluation(payload: dict, authorization: Optional[str] = Hea
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
-    
-    # Extract parameters
     questions = payload.get("questions", [])
     operations = payload.get("operations", [])
     similarity_methods = payload.get("similarity_methods")
@@ -870,15 +861,13 @@ async def run_batch_evaluation(payload: dict, authorization: Optional[str] = Hea
     normalize_vectors = payload.get("normalize_vectors", True)
     temperature = payload.get("temperature")
     include_faithfulness = payload.get("include_faithfulness", True)
-    
-    # Validate that we have questions and operations
+
     if not questions:
         raise HTTPException(status_code=400, detail="Questions are required")
     
     if not operations:
         raise HTTPException(status_code=400, detail="At least one operation is required")
-    
-    # Run batch evaluation
+
     evaluator = BatchEvaluator(username=username, is_guest=is_guest)
     
     results = evaluator.run_batch_experiment(
@@ -908,16 +897,12 @@ async def export_batch_results(payload: dict, authorization: Optional[str] = Hea
     results_data = payload.get("results")
     
     evaluator = BatchEvaluator(username=username, is_guest=is_guest)
-    
-    # Create output directory if needed
     user_dir = get_user_upload_dir(username, is_guest)
     output_dir = Path(user_dir) / "batch_exports"
     output_dir.mkdir(exist_ok=True)
-    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"batch_eval_{timestamp}.json"
     output_path = output_dir / filename
-    
     evaluator.export_to_json(results_data, str(output_path))
     
     return {
@@ -930,7 +915,6 @@ async def export_batch_results(payload: dict, authorization: Optional[str] = Hea
 
 @app.post("/counterfactual-analysis")
 async def run_counterfactual(payload: dict, authorization: Optional[str] = Header(None)):
-    """Run counterfactual retrieval analysis."""
     from app.extended_analysis import run_counterfactual_analysis
     
     user_info = await get_current_user_optional(authorization)
@@ -940,7 +924,7 @@ async def run_counterfactual(payload: dict, authorization: Optional[str] = Heade
     question = payload.get("question")
     original_chunks = payload.get("original_chunks", [])
     counterfactual_type = payload.get("counterfactual_type", "remove_top")
-    original_answer = payload.get("original_answer")  # NEW: Accept pre-generated answer
+    original_answer = payload.get("original_answer")
     
     result = run_counterfactual_analysis(
         question=question,
@@ -954,23 +938,19 @@ async def run_counterfactual(payload: dict, authorization: Optional[str] = Heade
         temperature=payload.get("temperature"),
         username=username,
         is_guest=is_guest,
-        original_answer=original_answer  # NEW: Pass it through
+        original_answer=original_answer 
     )
     
     return result
 
 @app.get("/debug/documents-metadata")
 async def debug_documents_metadata(authorization: Optional[str] = Header(None)):
-    """Debug endpoint to check which embedding models are stored in documents"""
     from app.vector_store import _load_records
     
     user_info = await get_current_user_optional(authorization)
     username = user_info["username"] if user_info else "default"
     is_guest = user_info.get("is_guest", True) if user_info else True
-    
     records = _load_records(username, is_guest)
-    
-    # Get unique docs with their embedding models
     docs = {}
     for rec in records:
         doc_name = rec.get("doc_name")

@@ -22,23 +22,15 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
   const [questionInput, setQuestionInput] = useState("");
   const [results, setResults] = useState<any>(null);
   const [isRunning, setIsRunning] = useState(false);
-  
-  // Ref for auto-scrolling to results
   const resultsRef = useRef<HTMLDivElement>(null);
-  
-  // Configuration state
   const [selectedMethods, setSelectedMethods] = useState<string[]>(["cosine", "hybrid"]);
   const [selectedTopK, setSelectedTopK] = useState<number[]>([5, 7]);
   const [selectedDoc, setSelectedDoc] = useState<string>("");
   const [normalizeVectors, setNormalizeVectors] = useState(true);
   const [includeFaithfulness, setIncludeFaithfulness] = useState(true);
-  
-  // Operation selection
   const [enableAsk, setEnableAsk] = useState(false);
   const [enableCompare, setEnableCompare] = useState(false);
   const [enableCritique, setEnableCritique] = useState(false);
-  
-  // Model selection for operations
   const [askModel, setAskModel] = useState("llama-3.1-8b-instant");
   const [compareModelLeft, setCompareModelLeft] = useState("llama-3.1-8b-instant");
   const [compareModelRight, setCompareModelRight] = useState("llama-3.3-70b-versatile");
@@ -47,11 +39,9 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
   const [critiqueSelfCorrect, setCritiqueSelfCorrect] = useState(true);
   
   const MAX_QUESTIONS = 20;
-  
-  // Auto-scroll to results when they appear
+
   useEffect(() => {
     if (results && resultsRef.current) {
-      // Small delay to ensure DOM is updated
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
@@ -76,7 +66,6 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
     
     setIsRunning(true);
     try {
-      // Build operations array
       const operations = [];
       if (enableAsk) {
         operations.push({
@@ -123,7 +112,6 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
     if (!results) return;
     
     try {
-      // Create JSON blob and download directly
       const jsonStr = JSON.stringify(results, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -172,10 +160,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
             ✕
           </button>
         </div>
-        
-        {/* Configuration Section */}
         <div className="space-y-4 mb-6">
-          {/* Questions Input */}
           <div>
             <label className="block text-sm text-slate-300 mb-2 font-semibold">
               Questions ({questions.length}/{MAX_QUESTIONS})
@@ -204,7 +189,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
             
             {questions.length >= MAX_QUESTIONS && (
               <div className="text-xs text-amber-400 mb-2">
-                ⚠️ Maximum {MAX_QUESTIONS} questions reached
+                Maximum {MAX_QUESTIONS} questions reached
               </div>
             )}
             
@@ -225,13 +210,11 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
               </div>
             )}
           </div>
-          
-          {/* Operations Selection */}
+
           <div className="border border-slate-700 rounded-lg p-4 bg-slate-800/30">
             <div className="text-sm text-slate-300 font-semibold mb-3">Operations to Run</div>
             
             <div className="space-y-3">
-              {/* Ask Operation */}
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 min-w-[80px]">
                   <input
@@ -254,8 +237,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                   ))}
                 </select>
               </div>
-              
-              {/* Compare Operation */}
+
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 min-w-[80px]">
                   <input
@@ -289,8 +271,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                   ))}
                 </select>
               </div>
-              
-              {/* Critique Operation */}
+
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 min-w-[80px]">
                   <input
@@ -332,7 +313,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                     disabled={!enableCritique}
                     className="w-3 h-3 rounded border-slate-600 text-violet-600 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
-                  <span>Self-correct (2 rounds)</span>
+                  <span>Self correct (2 rounds)</span>
                 </label>
               </div>
             </div>
@@ -425,8 +406,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
             </div>
           </div>
         </div>
-        
-        {/* Run Button */}
+
         <button
           onClick={handleRunBatch}
           disabled={!canRunBatch || isRunning}
@@ -440,8 +420,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
             "Configure settings to enable"
           ) : `Run Batch Evaluation (${questions.length} question${questions.length !== 1 ? 's' : ''})`}
         </button>
-        
-        {/* Results Section */}
+
         {results && (
           <div ref={resultsRef} className="mt-6 space-y-4 border-t border-slate-700 pt-6">
             <div className="flex justify-between items-center">
@@ -450,7 +429,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 onClick={handleExport}
                 className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded text-sm font-semibold"
               >
-                💾 Download JSON
+                Download JSON
               </button>
             </div>
             
@@ -475,8 +454,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 </div>
               </div>
             </div>
-            
-            {/* Summary Statistics */}
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="bg-slate-800 rounded p-3">
                 <div className="text-xs text-slate-400 mb-1">Avg Latency</div>
