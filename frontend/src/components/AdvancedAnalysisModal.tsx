@@ -460,7 +460,6 @@ export default function UnifiedAnalysisModal({
   const operation: "ask" | "compare" | "critique" =
     data.operation || "ask"; // safe fallback
   const chosenMethod = clampMethodKey(selectedMethod);
-  const selectedData = localResultsByMethod?.[chosenMethod];
 
   const renderMetricsForMethod = (methodData: any) => {
     if (!methodData?.extended_metrics) return null;

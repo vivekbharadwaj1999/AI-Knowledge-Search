@@ -497,6 +497,7 @@ export async function runCounterfactualAnalysis(params: {
   similarity?: string;
   embedding_model?: string;
   temperature?: number;
+  original_answer?: string;
 }): Promise<any> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
