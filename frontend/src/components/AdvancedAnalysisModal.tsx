@@ -193,6 +193,10 @@ export default function UnifiedAnalysisModal({
   const fullEmbedding: number[] | undefined = data.query_embedding;
   const [showFullEmbedding, setShowFullEmbedding] = useState(false);
 
+  // Counterfactual analysis state
+  const [counterfactualResult, setCounterfactualResult] = useState<any>(null);
+  const [isRunningCounterfactual, setIsRunningCounterfactual] = useState(false);
+
   // Answer Stability controls
   const [stabilityTemperature, setStabilityTemperature] = useState<number>(0);
   const [isRecomputing, setIsRecomputing] = useState(false);
@@ -234,13 +238,14 @@ export default function UnifiedAnalysisModal({
 
   const handleExportJson = () => {
     try {
-      // Create enhanced data object with stability history
+      // Create enhanced data object with stability history and counterfactual results
       const exportData = {
         ...data,
         answer_stability_history: stabilityHistory,
         answer_stability_current: localAnswerStability,
         results_by_method_current: localResultsByMethod,
         answer_stability_current_temperature: stabilityTemperature,
+        counterfactual_results: counterfactualResult, // ✅ NEW: Include counterfactual analysis
       };
 
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -315,6 +320,124 @@ export default function UnifiedAnalysisModal({
     }
   };
 
+  const handleCounterfactual = async (type: string) => {
+    setIsRunningCounterfactual(true);
+    setCounterfactualResult(null);
+    
+    try {
+      // Import the API function
+      const { runCounterfactualAnalysis } = await import("../api");
+      
+      // Determine which models to run counterfactual for
+      let modelsToTest: string[] = [];
+      
+      if (operation === "ask") {
+        modelsToTest = [data.input.model];
+      } else if (operation === "compare") {
+        // For Compare: Test BOTH models
+        modelsToTest = data.input.models || [];
+      } else if (operation === "critique") {
+        // For Critique: Use answer_model (final answer after critique)
+        modelsToTest = [data.input.answer_model];
+      }
+      
+      // Run counterfactual for ALL similarity methods and ALL models
+      const resultsPromises = METHODS.flatMap(method => 
+        modelsToTest.map(async (model) => {
+          const methodData = localResultsByMethod?.[method];
+          if (!methodData) return { method, model, result: null };
+
+          try {
+            // For Critique, get the final answer (after all rounds)
+            let answerToUse = methodData.answer;
+            if (operation === "critique" && methodData.critique_result) {
+              const rounds = methodData.critique_result.rounds || [];
+              if (rounds.length > 0) {
+                // Use the last round's answer (final version)
+                answerToUse = rounds[rounds.length - 1].answer;
+              }
+            }
+            
+            // For Compare, get the specific model's answer
+            if (operation === "compare" && methodData.answers_by_model) {
+              answerToUse = methodData.answers_by_model[model]?.answer || answerToUse;
+            }
+
+            const result = await runCounterfactualAnalysis({
+              question: data.input.question,
+              original_chunks: methodData.sources || [],
+              counterfactual_type: type,
+              top_k: data.input.top_k || 7,
+              doc_name: data.input.doc_name,
+              model: model,
+              similarity: method,
+              embedding_model: data.input.embedding_model,
+              temperature: stabilityTemperature,
+              original_answer: answerToUse  // Pass the correct answer
+            });
+            
+            return { method, model, result };
+          } catch (err) {
+            console.error(`Counterfactual failed for ${method} (${model}):`, err);
+            return { method, model, result: null };
+          }
+        })
+      );
+
+      const allResults = await Promise.all(resultsPromises);
+      
+      // Organize results by method and model
+      const resultsByMethod: any = {};
+      const metricsByMethod: any = {};
+      
+      allResults.forEach(({ method, model, result }) => {
+        if (result) {
+          if (!resultsByMethod[method]) {
+            resultsByMethod[method] = {};
+            metricsByMethod[method] = {};
+          }
+          
+          // For Compare, store per model
+          if (operation === "compare") {
+            if (!resultsByMethod[method].by_model) {
+              resultsByMethod[method].by_model = {};
+              metricsByMethod[method].by_model = {};
+            }
+            resultsByMethod[method].by_model[model] = {
+              answer: result.counterfactual_answer,
+              original_answer: result.original_answer,
+              sources: result.chunks_used || [],
+              original_sources: result.original_chunks || []
+            };
+            metricsByMethod[method].by_model[model] = result.metrics;
+          } else {
+            // For Ask and Critique, single model
+            resultsByMethod[method] = {
+              answer: result.counterfactual_answer,
+              original_answer: result.original_answer,
+              sources: result.chunks_used || [],
+              original_sources: result.original_chunks || []
+            };
+            metricsByMethod[method] = result.metrics;
+          }
+        }
+      });
+
+      setCounterfactualResult({
+        counterfactual_type: type,
+        results_by_method: resultsByMethod,
+        metrics_by_method: metricsByMethod,
+        operation: operation,
+        models: modelsToTest
+      });
+    } catch (error) {
+      console.error("Counterfactual analysis failed:", error);
+      alert("Failed to run counterfactual analysis. Please try again.");
+    } finally {
+      setIsRunningCounterfactual(false);
+    }
+  };
+
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
       if (!pinnedKey) return;
@@ -337,6 +460,180 @@ export default function UnifiedAnalysisModal({
   const operation: "ask" | "compare" | "critique" =
     data.operation || "ask"; // safe fallback
   const chosenMethod = clampMethodKey(selectedMethod);
+  const selectedData = localResultsByMethod?.[chosenMethod];
+
+  const renderMetricsForMethod = (methodData: any) => {
+    if (!methodData?.extended_metrics) return null;
+
+    return (
+      <div className="mt-3 space-y-3">
+        {/* Faithfulness Metrics */}
+        {methodData.extended_metrics.faithfulness && (
+          <div className="bg-slate-950/40 border border-slate-800/50 rounded-lg p-3">
+            <div className="text-[10px] font-semibold text-violet-300 mb-2 uppercase">
+              Faithfulness & Groundedness
+            </div>
+
+            {/* Overview Metrics */}
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="bg-slate-800/40 rounded p-2">
+                <div className="text-[9px] text-slate-400 mb-1">Evidence Coverage</div>
+                <div className="text-sm font-bold text-emerald-400">
+                  {Math.round(methodData.extended_metrics.faithfulness.evidence_coverage * 100)}%
+                </div>
+                <div className="text-[8px] text-slate-500 mt-0.5">
+                  {methodData.extended_metrics.faithfulness.supported_sentences}/{methodData.extended_metrics.faithfulness.total_sentences} sentences
+                </div>
+              </div>
+
+              <div className="bg-slate-800/40 rounded p-2">
+                <div className="text-[9px] text-slate-400 mb-1">Hallucination Risk</div>
+                <div className={`text-sm font-bold ${methodData.extended_metrics.faithfulness.hallucination_risk > 0.3 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {Math.round(methodData.extended_metrics.faithfulness.hallucination_risk * 100)}%
+                </div>
+                <div className="text-[8px] text-slate-500 mt-0.5">
+                  {methodData.extended_metrics.faithfulness.hallucination_risk > 0.3 ? 'Review needed' : 'Low risk'}
+                </div>
+              </div>
+
+              <div className="bg-slate-800/40 rounded p-2">
+                <div className="text-[9px] text-slate-400 mb-1">Citation Coverage</div>
+                <div className="text-sm font-bold text-sky-400">
+                  {methodData.extended_metrics.faithfulness.citation_coverage.toFixed(1)}%
+                </div>
+                <div className="text-[8px] text-slate-500 mt-0.5">
+                  Sentences with support
+                </div>
+              </div>
+            </div>
+
+            {/* Sentence-level Support */}
+            <div className="bg-slate-900/60 rounded-lg p-2">
+              <div className="text-[9px] font-semibold text-slate-300 mb-2 uppercase">
+                Sentence-level Evidence Support
+              </div>
+              
+              <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                {methodData.extended_metrics.faithfulness.sentence_support.map((s: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className={`border rounded p-2 ${
+                      s.supported
+                        ? "bg-emerald-950/30 border-emerald-900/50"
+                        : "bg-rose-950/30 border-rose-900/50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={`text-[9px] font-bold mt-0.5 ${
+                          s.supported ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {s.supported ? "✓" : "✗"}
+                      </span>
+                      <div className="flex-1">
+                        <div className="text-[9px] text-slate-200 mb-1">
+                          {s.sentence}
+                        </div>
+                        <div className="flex items-center gap-3 text-[8px] text-slate-400">
+                          {/* Overall Confidence */}
+                          <span className="font-semibold">
+                            Confidence: {Math.round(s.confidence * 100)}%
+                          </span>
+                          
+                          {/* Lexical & Semantic Breakdown */}
+                          {(s.confidence_lexical > 0 || s.confidence_semantic > 0) && (
+                            <span className="text-[7px] text-slate-500">
+                              (Lexical: {Math.round((s.confidence_lexical || 0) * 100)}% • 
+                              Semantic: {Math.round((s.confidence_semantic || 0) * 100)}%)
+                            </span>
+                          )}
+                          
+                          {/* Supporting Chunks */}
+                          {s.supporting_chunks && s.supporting_chunks.length > 0 && (
+                            <span>
+                              • Chunks: {s.supporting_chunks.map((c: any) => `#${c.chunk_id + 1}`).join(", ")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Extracted Quotes */}
+            {methodData.extended_metrics.faithfulness.extracted_quotes && methodData.extended_metrics.faithfulness.extracted_quotes.length > 0 && (
+              <div className="bg-sky-950/30 border border-sky-900/50 rounded-lg p-2 mt-2">
+                <div className="text-[9px] font-semibold text-sky-300 mb-1.5 uppercase">
+                  Extracted Direct Quotes
+                </div>
+                <div className="space-y-1">
+                  {methodData.extended_metrics.faithfulness.extracted_quotes.map((quote: string, idx: number) => (
+                    <div key={idx} className="text-[8px] text-slate-300 italic">
+                      "{quote}"
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Retrieval Quality Metrics */}
+        {methodData.extended_metrics.retrieval_quality && (
+          <div className="bg-slate-950/40 border border-slate-800/50 rounded-lg p-3">
+            <div className="text-[10px] font-semibold text-amber-300 mb-2 uppercase">
+              Retrieval Quality
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              <div className="bg-slate-800/40 rounded p-2">
+                <div className="text-[9px] text-slate-400 mb-1">Diversity</div>
+                <div className="text-sm font-bold text-emerald-400">
+                  {(methodData.extended_metrics.retrieval_quality.diversity_score * 100).toFixed(1)}%
+                </div>
+                <div className="text-[8px] text-slate-500 mt-0.5">
+                  Higher = more diverse
+                </div>
+              </div>
+
+              <div className="bg-slate-800/40 rounded p-2">
+                <div className="text-[9px] text-slate-400 mb-1">Redundancy</div>
+                <div className={`text-sm font-bold ${methodData.extended_metrics.retrieval_quality.chunk_redundancy > 0.5 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {(methodData.extended_metrics.retrieval_quality.chunk_redundancy * 100).toFixed(1)}%
+                </div>
+                <div className="text-[8px] text-slate-500 mt-0.5">
+                  Lower = less overlap
+                </div>
+              </div>
+
+              <div className="bg-slate-800/40 rounded p-2">
+                <div className="text-[9px] text-slate-400 mb-1">Doc Coverage</div>
+                <div className="text-sm font-bold text-sky-400">
+                  {methodData.extended_metrics.retrieval_quality.document_coverage}
+                </div>
+                <div className="text-[8px] text-slate-500 mt-0.5">
+                  Unique documents
+                </div>
+              </div>
+
+              <div className="bg-slate-800/40 rounded p-2">
+                <div className="text-[9px] text-slate-400 mb-1">Avg Similarity</div>
+                <div className="text-sm font-bold text-violet-400">
+                  {(methodData.extended_metrics.retrieval_quality.avg_chunk_similarity * 100).toFixed(1)}%
+                </div>
+                <div className="text-[8px] text-slate-500 mt-0.5">
+                  Between chunks
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderOperationResults = (method: MethodKey) => {
     const result = localResultsByMethod?.[method];
@@ -344,37 +641,58 @@ export default function UnifiedAnalysisModal({
 
     if (operation === "ask") {
       return (
-        <div className="mt-3 bg-slate-800/40 rounded p-3">
-          <div className="text-[10px] text-slate-400 mb-2">Generated Answer:</div>
-          <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
-            {result.answer}
+        <>
+          <div className="mt-3 bg-slate-800/40 rounded p-3">
+            <div className="text-[10px] text-slate-400 mb-2">Generated Answer:</div>
+            <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
+              {result.answer}
+            </div>
+            <div className="mt-2 text-[9px] text-slate-500">
+              Length: {result.answer_length} chars | Context: {result.context_used} chunks
+            </div>
           </div>
-          <div className="mt-2 text-[9px] text-slate-500">
-            Length: {result.answer_length} chars | Context: {result.context_used} chunks
-          </div>
-        </div>
+          {renderMetricsForMethod(result)}
+        </>
       );
     }
 
     if (operation === "compare") {
       return (
-        <div className="mt-3 space-y-2">
-          {Object.entries(result.answers_by_model || {}).map(
-            ([model, answerObj]: [string, any]) => (
-              <div key={model} className="bg-slate-800/40 rounded p-3">
-                <div className="text-[10px] text-violet-400 font-semibold mb-1">
-                  {model}
+        <>
+          <div className="mt-3 space-y-2">
+            {Object.entries(result.answers_by_model || {}).map(
+              ([model, answerObj]: [string, any]) => (
+                <div key={model} className="bg-slate-800/40 rounded p-3">
+                  <div className="text-[10px] text-violet-400 font-semibold mb-1">
+                    {model}
+                  </div>
+                  <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
+                    {answerObj?.answer ?? ""}
+                  </div>
+                  <div className="mt-1 text-[9px] text-slate-500">
+                    Length: {answerObj?.length ?? (answerObj?.answer?.length ?? 0)} chars
+                  </div>
                 </div>
-                <div className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
-                  {answerObj?.answer ?? ""}
-                </div>
-                <div className="mt-1 text-[9px] text-slate-500">
-                  Length: {answerObj?.length ?? (answerObj?.answer?.length ?? 0)} chars
-                </div>
-              </div>
-            )
+              )
+            )}
+          </div>
+          
+          {/* Show metrics for each model separately */}
+          {result.extended_metrics_by_model && (
+            <div className="mt-3 space-y-4">
+              {Object.entries(result.extended_metrics_by_model).map(
+                ([model, metrics]: [string, any]) => (
+                  <div key={model} className="border-l-2 border-violet-500 pl-3">
+                    <div className="text-[10px] font-bold text-violet-300 mb-2 uppercase">
+                      {model} - Metrics
+                    </div>
+                    {renderMetricsForMethod({ extended_metrics: metrics })}
+                  </div>
+                )
+              )}
+            </div>
           )}
-        </div>
+        </>
       );
     }
     if (operation === "critique") {
@@ -394,73 +712,76 @@ export default function UnifiedAnalysisModal({
         typeof cr.improved_prompt === "string" ? cr.improved_prompt : "";
 
       return (
-        <div className="mt-3 space-y-3">
-          <div className="text-[10px] text-slate-500">
-            Rounds: {hasRounds ? rounds.length : cr.num_rounds ?? 1} | Context:{" "}
-            {result.context_used} chunks
-          </div>
-          {!hasRounds && (
-            <>
-              {fallbackAnswer && (
-                <Block title="Answer (base model)" tone="answer">
-                  {fallbackAnswer}
-                </Block>
-              )}
+        <>
+          <div className="mt-3 space-y-3">
+            <div className="text-[10px] text-slate-500">
+              Rounds: {hasRounds ? rounds.length : cr.num_rounds ?? 1} | Context:{" "}
+              {result.context_used} chunks
+            </div>
+            {!hasRounds && (
+              <>
+                {fallbackAnswer && (
+                  <Block title="Answer (base model)" tone="answer">
+                    {fallbackAnswer}
+                  </Block>
+                )}
 
-              {fallbackCritique && (
-                <Block title="Critique" tone="critique">
-                  {fallbackCritique}
-                </Block>
-              )}
+                {fallbackCritique && (
+                  <Block title="Critique" tone="critique">
+                    {fallbackCritique}
+                  </Block>
+                )}
 
-              {fallbackScores && <ScoreGrid scores={fallbackScores} />}
-            </>
-          )}
-          {hasRounds && (
-            <>
-              {rounds[0] && (
-                <>
-                  {typeof rounds[0].answer === "string" && rounds[0].answer && (
-                    <Block title="Round 1 — Answer" tone="answer">
-                      {rounds[0].answer}
-                    </Block>
-                  )}
-
-                  {typeof rounds[0].answer_critique_markdown === "string" &&
-                    rounds[0].answer_critique_markdown && (
-                      <Block title="Round 1 — Critique" tone="critique">
-                        {rounds[0].answer_critique_markdown}
+                {fallbackScores && <ScoreGrid scores={fallbackScores} />}
+              </>
+            )}
+            {hasRounds && (
+              <>
+                {rounds[0] && (
+                  <>
+                    {typeof rounds[0].answer === "string" && rounds[0].answer && (
+                      <Block title="Round 1 — Answer" tone="answer">
+                        {rounds[0].answer}
                       </Block>
                     )}
 
-                  {rounds[0].scores && <ScoreGrid scores={rounds[0].scores} />}
-                </>
-              )}
-              {rounds[0]?.improved_prompt && (
-                <Block title="Improved prompt (for next round)" tone="prompt">
-                  {rounds[0].improved_prompt}
-                </Block>
-              )}
-              {rounds[1] && (
-                <>
-                  {typeof rounds[1].answer === "string" && rounds[1].answer && (
-                    <Block title="Round 2 — Answer (final)" tone="answer">
-                      {rounds[1].answer}
-                    </Block>
-                  )}
+                    {typeof rounds[0].answer_critique_markdown === "string" &&
+                      rounds[0].answer_critique_markdown && (
+                        <Block title="Round 1 — Critique" tone="critique">
+                          {rounds[0].answer_critique_markdown}
+                        </Block>
+                      )}
 
-                  {rounds[1].scores && <ScoreGrid scores={rounds[1].scores} />}
-                </>
-              )}
+                    {rounds[0].scores && <ScoreGrid scores={rounds[0].scores} />}
+                  </>
+                )}
+                {rounds[0]?.improved_prompt && (
+                  <Block title="Improved prompt (for next round)" tone="prompt">
+                    {rounds[0].improved_prompt}
+                  </Block>
+                )}
+                {rounds[1] && (
+                  <>
+                    {typeof rounds[1].answer === "string" && rounds[1].answer && (
+                      <Block title="Round 2 — Answer (final)" tone="answer">
+                        {rounds[1].answer}
+                      </Block>
+                    )}
 
-              {!rounds[0]?.improved_prompt && fallbackImprovedPrompt && (
-                <Block title="Improved prompt" tone="prompt">
-                  {fallbackImprovedPrompt}
-                </Block>
-              )}
-            </>
-          )}
-        </div>
+                    {rounds[1].scores && <ScoreGrid scores={rounds[1].scores} />}
+                  </>
+                )}
+
+                {!rounds[0]?.improved_prompt && fallbackImprovedPrompt && (
+                  <Block title="Improved prompt" tone="prompt">
+                    {fallbackImprovedPrompt}
+                  </Block>
+                )}
+              </>
+            )}
+          </div>
+          {renderMetricsForMethod(result)}
+        </>
       );
     }
 
@@ -1158,6 +1479,247 @@ export default function UnifiedAnalysisModal({
                       </div>
                     </section>
                   )}
+
+                  {/* Metrics now shown per-method above - no duplicate sections needed */}
+
+                  {/* Counterfactual Retrieval Section */}
+                  <section className="bg-slate-950/60 border border-slate-800 rounded-lg p-4">
+                    <h3 className="text-sm font-bold text-rose-300 mb-2">
+                      COUNTERFACTUAL RETRIEVAL (STRESS TESTING)
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mb-3">
+                      Test retrieval dependence by modifying which chunks are used
+                    </p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-4">
+                      <button
+                        onClick={() => handleCounterfactual("remove_top")}
+                        disabled={isRunningCounterfactual}
+                        className="px-3 py-2 bg-indigo-900/30 hover:bg-indigo-900/50 disabled:bg-slate-800 disabled:cursor-not-allowed border border-indigo-700 text-indigo-300 rounded text-xs font-semibold transition-colors"
+                      >
+                        {isRunningCounterfactual ? "Running..." : "Remove Top Chunk"}
+                      </button>
+                      
+                      <button
+                        onClick={() => handleCounterfactual("remove_top_3")}
+                        disabled={isRunningCounterfactual}
+                        className="px-3 py-2 bg-indigo-900/30 hover:bg-indigo-900/50 disabled:bg-slate-800 disabled:cursor-not-allowed border border-indigo-700 text-indigo-300 rounded text-xs font-semibold transition-colors"
+                      >
+                        {isRunningCounterfactual ? "Running..." : "Remove Top 3"}
+                      </button>
+                      
+                      <button
+                        onClick={() => handleCounterfactual("reverse_order")}
+                        disabled={isRunningCounterfactual}
+                        className="px-3 py-2 bg-indigo-900/30 hover:bg-indigo-900/50 disabled:bg-slate-800 disabled:cursor-not-allowed border border-indigo-700 text-indigo-300 rounded text-xs font-semibold transition-colors"
+                      >
+                        {isRunningCounterfactual ? "Running..." : "Reverse Order"}
+                      </button>
+                      
+                      <button
+                        onClick={() => handleCounterfactual("random")}
+                        disabled={isRunningCounterfactual}
+                        className="px-3 py-2 bg-indigo-900/30 hover:bg-indigo-900/50 disabled:bg-slate-800 disabled:cursor-not-allowed border border-indigo-700 text-indigo-300 rounded text-xs font-semibold transition-colors"
+                      >
+                        {isRunningCounterfactual ? "Running..." : "Random Shuffle"}
+                      </button>
+                    </div>
+                    
+                    {counterfactualResult && (
+                      <div className="space-y-4">
+                        {/* Overall Result Header */}
+                        <div className="bg-slate-900/60 rounded-lg p-3">
+                          <div className="text-[11px] font-semibold text-slate-300 uppercase">
+                            Result: {counterfactualResult.counterfactual_type.replace(/_/g, " ")}
+                          </div>
+                        </div>
+
+                        {/* Results for Each Similarity Method */}
+                        {METHODS.map((method) => {
+                          const methodData = counterfactualResult.results_by_method?.[method];
+                          if (!methodData) return null;
+
+                          // Check if this is Compare (has by_model structure)
+                          const isCompare = counterfactualResult.operation === "compare" && methodData.by_model;
+                          
+                          // Helper function to render a single result
+                          const renderResult = (data: any, metrics: any, modelName?: string) => {
+                            const originalChunks = data.original_sources || [];
+                            const counterfactualChunks = data.sources || [];
+                            
+                            return (
+                              <div className={modelName ? "border-l-2 border-violet-500 pl-3 mt-3" : ""}>
+                                {modelName && (
+                                  <div className="text-[10px] font-bold text-violet-300 mb-2 uppercase">
+                                    {modelName}
+                                  </div>
+                                )}
+                                
+                                {/* Metrics - Grouped Layout */}
+                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                  {/* Answer Similarity - All 3 metrics grouped */}
+                                  <div className="bg-slate-800/40 rounded p-2">
+                                    <div className="text-[8px] text-slate-400 mb-2 font-semibold">Answer Similarity</div>
+                                    <div className="flex gap-3 items-center">
+                                      <div className="flex-1">
+                                        <div className="text-[7px] text-slate-500 mb-0.5">Semantic</div>
+                                        <div className={`text-xs font-bold ${
+                                          (metrics?.answer_similarity_semantic || 0) < 0.5 
+                                            ? 'text-rose-400' 
+                                            : 'text-emerald-400'
+                                        }`}>
+                                          {((metrics?.answer_similarity_semantic || 0) * 100).toFixed(1)}%
+                                        </div>
+                                      </div>
+                                      <div className="flex-1">
+                                        <div className="text-[7px] text-slate-500 mb-0.5">ROUGE-L</div>
+                                        <div className={`text-xs font-bold ${
+                                          (metrics?.answer_similarity_rouge_l || 0) < 0.5 
+                                            ? 'text-rose-400' 
+                                            : 'text-emerald-400'
+                                        }`}>
+                                          {((metrics?.answer_similarity_rouge_l || 0) * 100).toFixed(1)}%
+                                        </div>
+                                      </div>
+                                      <div className="flex-1">
+                                        <div className="text-[7px] text-slate-500 mb-0.5">Jaccard</div>
+                                        <div className={`text-xs font-bold ${
+                                          (metrics?.answer_similarity_jaccard || 0) < 0.5 
+                                            ? 'text-rose-400' 
+                                            : 'text-emerald-400'
+                                        }`}>
+                                          {((metrics?.answer_similarity_jaccard || 0) * 100).toFixed(1)}%
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Chunk Overlap */}
+                                  <div className="bg-slate-800/40 rounded p-2">
+                                    <div className="text-[8px] text-slate-400 mb-1">Chunk Overlap</div>
+                                    <div className="text-sm font-bold text-violet-400">
+                                      {((metrics?.chunk_overlap || 0) * 100).toFixed(1)}%
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Dependence */}
+                                  <div className="bg-slate-800/40 rounded p-2">
+                                    <div className="text-[8px] text-slate-400 mb-1">Dependence</div>
+                                    <div className={`text-sm font-bold ${
+                                      (metrics?.retrieval_dependence || 0) > 0.7 
+                                        ? 'text-amber-400' 
+                                        : 'text-emerald-400'
+                                    }`}>
+                                      {((metrics?.retrieval_dependence || 0) * 100).toFixed(1)}%
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {metrics?.answer_collapsed && (
+                                  <div className="bg-rose-950/30 border border-rose-900/50 rounded p-2 mb-3">
+                                    <div className="text-[9px] text-rose-300 font-semibold">
+                                      ⚠️ Answer Collapsed - Strong retrieval dependence!
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3">
+                                {/* Original Answer with Chunk Pills */}
+                                <div>
+                                  <div className="text-[9px] text-slate-400 mb-2">Original Chunks & Answer</div>
+                                  
+                                  {/* Chunk Pills */}
+                                  <div className="flex flex-wrap gap-1 mb-2">
+                                    {originalChunks.map((chunk: any, idx: number) => (
+                                      <div
+                                        key={idx}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-900/30 border border-emerald-800/50 rounded-full"
+                                      >
+                                        <span className="text-[8px] font-bold text-emerald-400">#{idx + 1}</span>
+                                        <span className="text-[8px] text-slate-300 truncate max-w-[80px]">
+                                          {chunk.text?.substring(0, 15)}...
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div className="bg-emerald-950/30 border border-emerald-900/50 rounded p-2 text-[9px] text-slate-200 max-h-40 overflow-y-auto leading-relaxed">
+                                    {data.original_answer || "N/A"}
+                                  </div>
+                                </div>
+                                
+                                {/* Counterfactual Answer with Chunk Pills */}
+                                <div>
+                                  <div className="text-[9px] text-slate-400 mb-2">Counterfactual Chunks & Answer</div>
+                                  
+                                  {/* Chunk Pills */}
+                                  <div className="flex flex-wrap gap-1 mb-2">
+                                    {counterfactualChunks.map((chunk: any, idx: number) => {
+                                      // Calculate the original index based on counterfactual type
+                                      let originalIdx = idx;
+                                      if (counterfactualResult.counterfactual_type === "remove_top") {
+                                        originalIdx = idx + 1; // Skipped first chunk
+                                      } else if (counterfactualResult.counterfactual_type === "remove_top_3") {
+                                        originalIdx = idx + 3; // Skipped first 3 chunks
+                                      } else if (counterfactualResult.counterfactual_type === "reverse_order") {
+                                        originalIdx = originalChunks.length - 1 - idx;
+                                      } else if (counterfactualResult.counterfactual_type === "random") {
+                                        originalIdx = chunk.rank ? chunk.rank - 1 : idx;
+                                      }
+                                      
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-900/30 border border-rose-800/50 rounded-full"
+                                        >
+                                          <span className="text-[8px] font-bold text-rose-400">#{originalIdx + 1}</span>
+                                          <span className="text-[8px] text-slate-300 truncate max-w-[80px]">
+                                            {chunk.text?.substring(0, 15)}...
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="bg-rose-950/30 border border-rose-900/50 rounded p-2 text-[9px] text-slate-200 max-h-40 overflow-y-auto leading-relaxed">
+                                    {data.answer || "N/A"}
+                                  </div>
+                                </div>
+                              </div>
+                              </div>
+                            );
+                          };
+
+                          return (
+                            <div key={method} className="bg-slate-900/60 rounded-lg p-3">
+                              {/* Method Header */}
+                              <div className={`text-[11px] font-semibold ${METHOD_STYLES[method].titleText} mb-3 uppercase`}>
+                                {METHOD_INFO[method].name}
+                              </div>
+
+                              {/* Render results - either single model or multiple models */}
+                              {isCompare ? (
+                                // Compare: Show results for each model
+                                <div className="space-y-4">
+                                  {Object.entries(methodData.by_model).map(([modelName, modelData]: [string, any]) => {
+                                    const modelMetrics = counterfactualResult.metrics_by_method?.[method]?.by_model?.[modelName];
+                                    return (
+                                      <div key={modelName}>
+                                        {renderResult(modelData, modelMetrics, modelName)}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                // Ask/Critique: Single model
+                                renderResult(methodData, counterfactualResult.metrics_by_method?.[method])
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
                 </div>
               </Dialog.Panel>
             </Transition.Child>

@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import logo from "./assets/logo.webp";
 import InstructionsModal from "./components/InstructionsModal";
 import UnifiedAnalysisModal from "./components/AdvancedAnalysisModal";
+import BatchEvaluationPanel from "./components/BatchEvaluationPanel";
 import AuthModal from "./components/AuthModal";
 import UserDropdown from "./components/UserDropdown";
 import DeleteAccountModal from "./components/DeleteAccountModal";
@@ -707,6 +708,7 @@ function App() {
   );
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
   const [analysisModalData, setAnalysisModalData] = useState<any>(null);
+  const [showBatchEval, setShowBatchEval] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -1444,6 +1446,15 @@ function App() {
                 {relationsLoading
                   ? "Analyzing relations…"
                   : "Relations between these documents"}
+              </button>
+
+              <button
+                onClick={() => setShowBatchEval(true)}
+                disabled={documents.length === 0}
+                className="px-3 py-1.5 text-xs sm:text-sm rounded-md border border-violet-500/70 bg-violet-600/80 hover:bg-violet-500 disabled:bg-slate-700 disabled:border-slate-600 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-1.5"
+                title={documents.length === 0 ? "Upload documents first to enable batch evaluation" : "Run batch experiments across multiple configurations"}
+              >
+                <span>Batch Evaluation</span>
               </button>
 
               <button
@@ -2404,6 +2415,13 @@ function App() {
         data={analysisModalData}
         selectedMethod={analysisModalData?.selectedMethod}
       />
+
+      {showBatchEval && (
+        <BatchEvaluationPanel
+          documents={documents}
+          onClose={() => setShowBatchEval(false)}
+        />
+      )}
     </div>
   );
 }
