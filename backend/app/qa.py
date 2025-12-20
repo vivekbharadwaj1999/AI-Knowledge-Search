@@ -4,6 +4,10 @@ from app.config import EmbeddingClient, LLMClient
 from app.vector_store import similarity_search, _load_records, get_document_embedding_model, get_documents_info
 from app.critique import run_critique
 from rouge_score import rouge_scorer
+from app.faithfulness import (
+    calculate_faithfulness_metrics,
+    calculate_retrieval_quality_metrics
+)
 
 def _l2_normalize(v: List[float], eps: float = 1e-12) -> List[float]:
     n = math.sqrt(sum(x * x for x in v))
@@ -391,6 +395,23 @@ def analyze_ask_with_all_methods(
             "context_used": len(context_chunks)
         }
 
+    # Add extended metrics (faithfulness and retrieval quality)
+    for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
+        answer = results_by_method[method]["answer"]
+        chunks = results_by_method[method]["sources"]
+        
+        results_by_method[method]["extended_metrics"] = {
+            "faithfulness": calculate_faithfulness_metrics(
+                answer=answer,
+                retrieved_chunks=chunks,
+                question=question
+            ),
+            "retrieval_quality": calculate_retrieval_quality_metrics(
+                retrieved_chunks=chunks,
+                question=question
+            )
+        }
+
     answer_stability_by_method = {}
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
         answer_stability_by_method[method] = calculate_answer_stability(
@@ -472,6 +493,25 @@ def analyze_compare_with_all_methods(
             "context_used": len(context_chunks)
         }
 
+    # Add extended metrics for each method and model
+    for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
+        chunks = results_by_method[method]["sources"]
+        results_by_method[method]["extended_metrics_by_model"] = {}
+        
+        for model in models:
+            answer = results_by_method[method]["answers_by_model"][model]["answer"]
+            results_by_method[method]["extended_metrics_by_model"][model] = {
+                "faithfulness": calculate_faithfulness_metrics(
+                    answer=answer,
+                    retrieved_chunks=chunks,
+                    question=question
+                ),
+                "retrieval_quality": calculate_retrieval_quality_metrics(
+                    retrieved_chunks=chunks,
+                    question=question
+                )
+            }
+
     answer_stability_by_model = {}
     for model in models:
         answer_stability_by_model[model] = {}
@@ -530,6 +570,8 @@ def analyze_critique_with_all_methods(
             similarity=method,
             embedding_model=embedding_model,
             temperature=temperature,
+            username=username,
+            is_guest=is_guest,
         )
 
         chunks = retrieval_data["top_k_by_method"][method]
@@ -551,6 +593,23 @@ def analyze_critique_with_all_methods(
         }
 
         final_answers_by_method[method] = critique_result.get("answer", "")
+
+    # Add extended metrics
+    for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:
+        answer = final_answers_by_method[method]
+        chunks = results_by_method[method]["sources"]
+        
+        results_by_method[method]["extended_metrics"] = {
+            "faithfulness": calculate_faithfulness_metrics(
+                answer=answer,
+                retrieved_chunks=chunks,
+                question=question
+            ),
+            "retrieval_quality": calculate_retrieval_quality_metrics(
+                retrieved_chunks=chunks,
+                question=question
+            )
+        }
 
     answer_stability_by_method = {}
     for method in ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]:

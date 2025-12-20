@@ -427,3 +427,95 @@ export async function resetOperationsLog(): Promise<void> {
     throw new Error("Failed to reset operations log");
   }
 }
+
+// Batch Evaluation API
+export async function runBatchEvaluation(params: {
+  questions?: string[];
+  question_count?: number;
+  similarity_methods?: string[];
+  embedding_models?: string[];
+  top_k_values?: number[];
+  llm_models?: string[];
+  doc_name?: string;
+  temperature?: number;
+  include_faithfulness?: boolean;
+}): Promise<any> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/batch-evaluate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Batch evaluation failed (${response.status}): ${text}`);
+  }
+  return response.json();
+}
+
+export async function exportBatchResults(params: {
+  results: any;
+  format: "json";
+}): Promise<{ status: string; filename: string; path: string; format: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/batch-evaluate/export`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Export failed (${response.status}): ${text}`);
+  }
+  return response.json();
+}
+
+// Counterfactual Analysis API
+export async function runCounterfactualAnalysis(params: {
+  question: string;
+  original_chunks: any[];
+  counterfactual_type: string;
+  top_k?: number;
+  doc_name?: string;
+  model?: string;
+  similarity?: string;
+  embedding_model?: string;
+  temperature?: number;
+}): Promise<any> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/counterfactual-analysis`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Counterfactual analysis failed (${response.status}): ${text}`);
+  }
+  return response.json();
+}
+

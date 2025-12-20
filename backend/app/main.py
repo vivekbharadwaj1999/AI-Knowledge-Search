@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 import json
 from pathlib import Path
+from datetime import datetime
 
 from app.schemas import (
     AskRequest,
@@ -848,3 +849,143 @@ async def delete_all_documents(authorization: Optional[str] = Header(None)):
     clear_vector_store(username, is_guest)
 
     return {"status": "ok", "message": "All documents removed"}
+
+
+@app.post("/batch-evaluate")
+async def run_batch_evaluation(payload: dict, authorization: Optional[str] = Header(None)):
+    """Run batch evaluation across multiple configurations."""
+    from app.batch_evaluation import BatchEvaluator
+    
+    user_info = await get_current_user_optional(authorization)
+    username = user_info["username"] if user_info else "default"
+    is_guest = user_info.get("is_guest", True) if user_info else True
+    
+    # Extract parameters
+    questions = payload.get("questions", [])
+    operations = payload.get("operations", [])
+    similarity_methods = payload.get("similarity_methods")
+    embedding_models = payload.get("embedding_models")
+    top_k_values = payload.get("top_k_values")
+    doc_name = payload.get("doc_name")
+    normalize_vectors = payload.get("normalize_vectors", True)
+    temperature = payload.get("temperature")
+    include_faithfulness = payload.get("include_faithfulness", True)
+    
+    # Validate that we have questions and operations
+    if not questions:
+        raise HTTPException(status_code=400, detail="Questions are required")
+    
+    if not operations:
+        raise HTTPException(status_code=400, detail="At least one operation is required")
+    
+    # Run batch evaluation
+    evaluator = BatchEvaluator(username=username, is_guest=is_guest)
+    
+    results = evaluator.run_batch_experiment(
+        questions=questions,
+        operations=operations,
+        similarity_methods=similarity_methods,
+        embedding_models=embedding_models,
+        top_k_values=top_k_values,
+        doc_name=doc_name,
+        normalize_vectors=normalize_vectors,
+        temperature=temperature,
+        include_faithfulness=include_faithfulness
+    )
+    
+    return results
+
+
+@app.post("/batch-evaluate/export")
+async def export_batch_results(payload: dict, authorization: Optional[str] = Header(None)):
+    """Export batch evaluation results to JSON."""
+    from app.batch_evaluation import BatchEvaluator
+    
+    user_info = await get_current_user_optional(authorization)
+    username = user_info["username"] if user_info else "default"
+    is_guest = user_info.get("is_guest", True) if user_info else True
+    
+    results_data = payload.get("results")
+    
+    evaluator = BatchEvaluator(username=username, is_guest=is_guest)
+    
+    # Create output directory if needed
+    user_dir = get_user_upload_dir(username, is_guest)
+    output_dir = Path(user_dir) / "batch_exports"
+    output_dir.mkdir(exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"batch_eval_{timestamp}.json"
+    output_path = output_dir / filename
+    
+    evaluator.export_to_json(results_data, str(output_path))
+    
+    return {
+        "status": "success",
+        "filename": filename,
+        "path": str(output_path),
+        "format": "json"
+    }
+
+
+@app.post("/counterfactual-analysis")
+async def run_counterfactual(payload: dict, authorization: Optional[str] = Header(None)):
+    """Run counterfactual retrieval analysis."""
+    from app.extended_analysis import run_counterfactual_analysis
+    
+    user_info = await get_current_user_optional(authorization)
+    username = user_info["username"] if user_info else "default"
+    is_guest = user_info.get("is_guest", True) if user_info else True
+    
+    question = payload.get("question")
+    original_chunks = payload.get("original_chunks", [])
+    counterfactual_type = payload.get("counterfactual_type", "remove_top")
+    original_answer = payload.get("original_answer")  # NEW: Accept pre-generated answer
+    
+    result = run_counterfactual_analysis(
+        question=question,
+        original_chunks=original_chunks,
+        counterfactual_type=counterfactual_type,
+        k=payload.get("top_k", 7),
+        doc_name=payload.get("doc_name"),
+        model=payload.get("model"),
+        similarity=payload.get("similarity", "cosine"),
+        embedding_model=payload.get("embedding_model"),
+        temperature=payload.get("temperature"),
+        username=username,
+        is_guest=is_guest,
+        original_answer=original_answer  # NEW: Pass it through
+    )
+    
+    return result
+
+@app.get("/debug/documents-metadata")
+async def debug_documents_metadata(authorization: Optional[str] = Header(None)):
+    """Debug endpoint to check which embedding models are stored in documents"""
+    from app.vector_store import _load_records
+    
+    user_info = await get_current_user_optional(authorization)
+    username = user_info["username"] if user_info else "default"
+    is_guest = user_info.get("is_guest", True) if user_info else True
+    
+    records = _load_records(username, is_guest)
+    
+    # Get unique docs with their embedding models
+    docs = {}
+    for rec in records:
+        doc_name = rec.get("doc_name")
+        if doc_name not in docs:
+            docs[doc_name] = {
+                "embedding_model": rec.get("embedding_model", "NOT_SET"),
+                "chunks": 0,
+                "sample_chunk": rec.get("text", "")[:100] + "..."
+            }
+        docs[doc_name]["chunks"] += 1
+    
+    return {
+        "username": username,
+        "is_guest": is_guest,
+        "total_chunks": len(records),
+        "documents": docs
+    }
+
