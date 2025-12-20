@@ -1,14 +1,3 @@
-"""
-Batch Evaluation Harness for VivBot RAG System
-
-This module allows running controlled experiments across:
-- Multiple questions
-- Different similarity methods
-- Different embedding models
-- Different Top-K values
-- Different LLM models
-"""
-
 import json
 import csv
 import time
@@ -22,8 +11,6 @@ from app.faithfulness import calculate_faithfulness_metrics
 
 
 class BatchEvaluator:
-    """Runs batch experiments and exports results."""
-    
     def __init__(self, username: str = "default", is_guest: bool = False):
         self.username = username
         self.is_guest = is_guest
@@ -41,25 +28,6 @@ class BatchEvaluator:
         temperature: Optional[float] = None,
         include_faithfulness: bool = True
     ) -> Dict[str, Any]:
-        """
-        Run a batch experiment with specified configurations.
-        
-        Args:
-            questions: List of questions to evaluate
-            operations: List of operation configs (ask/compare/critique)
-            similarity_methods: List of similarity methods to test (default: all 5)
-            embedding_models: List of embedding models to test (default: current)
-            top_k_values: List of Top-K values to test (default: [5, 7, 10])
-            doc_name: Optional document to filter by
-            normalize_vectors: Whether to normalize vectors
-            temperature: Temperature for LLM
-            include_faithfulness: Whether to calculate faithfulness metrics
-        
-        Returns:
-            Dict with experiment results and metadata
-        """
-        
-        # Set defaults
         if similarity_methods is None:
             similarity_methods = ["cosine", "dot", "neg_l2", "neg_l1", "hybrid"]
         
@@ -67,24 +35,18 @@ class BatchEvaluator:
             top_k_values = [5, 7, 10]
         
         if embedding_models is None:
-            embedding_models = [None]  # Use default
-        
-        # Track experiment metadata
+            embedding_models = [None] 
         experiment_start = datetime.now()
         total_runs = len(questions) * len(similarity_methods) * len(embedding_models) * len(top_k_values) * len(operations)
-        
         results = []
         run_count = 0
-        
-        # Run experiments
+
         for question_idx, question in enumerate(questions):
             for embedding_model in embedding_models:
                 for similarity_method in similarity_methods:
                     for top_k in top_k_values:
                         for operation in operations:
                             run_count += 1
-                            
-                            # Run single evaluation based on operation type
                             try:
                                 result = self._run_single_operation(
                                     question=question,
@@ -104,7 +66,6 @@ class BatchEvaluator:
                                 results.append(result)
                                 
                             except Exception as e:
-                                # Log error but continue
                                 results.append({
                                     "run_number": run_count,
                                     "total_runs": total_runs,
@@ -116,16 +77,12 @@ class BatchEvaluator:
         
         experiment_end = datetime.now()
         duration = (experiment_end - experiment_start).total_seconds()
-        
-        # Collect actual embedding models used from results
         actual_models_used = set()
         for result in results:
             if result.get("status") == "success":
                 model = result.get("configuration", {}).get("embedding_model")
                 if model and model != "default":
                     actual_models_used.add(model)
-        
-        # Calculate summary statistics
         summary = self._calculate_summary_statistics(results)
         
         return {
@@ -160,26 +117,20 @@ class BatchEvaluator:
         normalize_vectors: bool,
         temperature: Optional[float],
         include_faithfulness: bool
-    ) -> Dict[str, Any]:
-        """Run a single evaluation for any operation type (ask/compare/critique)."""
-        
+    ) -> Dict[str, Any]:     
         from app.qa import answer_question
         from app.critique import run_critique
         from app.vector_store import get_document_embedding_model, get_documents_info
         
         start_time = time.time()
         operation_type = operation.get("type", "ask")
-        
-        # Detect actual embedding model if not specified
         actual_embedding_model = embedding_model
         if actual_embedding_model is None:
             if doc_name:
-                # Get model from specific document
                 actual_embedding_model = get_document_embedding_model(
                     doc_name, username=self.username, is_guest=self.is_guest
                 )
             else:
-                # Get most common model across all documents
                 docs_info = get_documents_info(username=self.username, is_guest=self.is_guest)
                 if docs_info:
                     from collections import Counter
@@ -202,7 +153,6 @@ class BatchEvaluator:
         }
         
         if operation_type == "ask":
-            # Simple ask operation
             model = operation.get("model")
             answer, plain_chunks, sources = answer_question(
                 question=question,
@@ -226,12 +176,9 @@ class BatchEvaluator:
             result["metrics"]["latency_seconds"] = latency
             
         elif operation_type == "compare":
-            # Compare operation
             models = operation.get("models", [])
             if len(models) < 2:
-                models = [None, None]  # Default models
-            
-            # Run with first model
+                models = [None, None]
             answer1, _, sources1 = answer_question(
                 question=question,
                 k=top_k,
@@ -244,8 +191,6 @@ class BatchEvaluator:
                 username=self.username,
                 is_guest=self.is_guest
             )
-            
-            # Run with second model
             answer2, _, sources2 = answer_question(
                 question=question,
                 k=top_k,
@@ -270,8 +215,6 @@ class BatchEvaluator:
                 "model_1": sources1,
                 "model_2": sources2
             }
-            
-            # Calculate metrics for both models
             metrics1 = self._calculate_metrics(answer1, sources1, question, include_faithfulness)
             metrics1["latency_seconds"] = latency
             
@@ -284,7 +227,6 @@ class BatchEvaluator:
             }
             
         elif operation_type == "critique":
-            # Critique operation
             answer_model = operation.get("answer_model")
             critic_model = operation.get("critic_model")
             self_correct = operation.get("self_correct", True)
@@ -312,8 +254,6 @@ class BatchEvaluator:
             result["answer"] = critique_result.get("answer", "")
             result["critique_rounds"] = len(critique_result.get("rounds", []))
             result["sources"] = critique_result.get("sources", [])
-            
-            # Get metrics from final answer
             final_answer = critique_result.get("answer", "")
             sources = critique_result.get("sources", [])
             result["metrics"] = self._calculate_metrics(final_answer, sources, question, include_faithfulness)
@@ -328,7 +268,6 @@ class BatchEvaluator:
         question: str,
         include_faithfulness: bool
     ) -> Dict[str, Any]:
-        """Calculate metrics for an answer."""
         metrics = {
             "answer_length": len(answer),
             "answer_word_count": len(answer.split()),
@@ -346,29 +285,21 @@ class BatchEvaluator:
     
     
     def _calculate_summary_statistics(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Calculate summary statistics across all runs."""
-        
         successful_results = [r for r in results if r.get("status") == "success"]
         
         if not successful_results:
             return {"error": "No successful runs to summarize"}
-        
-        # Helper function to get metrics (handles both simple and compare operations)
         def get_metrics(result):
             metrics = result.get("metrics", {})
-            # For compare operations, take model_1 metrics as representative
             if "model_1" in metrics:
                 return metrics["model_1"]
             return metrics
         
-        # Calculate averages
         all_metrics = [get_metrics(r) for r in successful_results]
         
         avg_latency = sum(m.get("latency_seconds", 0) for m in all_metrics) / len(all_metrics)
         avg_answer_length = sum(m.get("answer_length", 0) for m in all_metrics) / len(all_metrics)
         avg_chunks = sum(m.get("chunks_retrieved", 0) for m in all_metrics) / len(all_metrics)
-        
-        # Calculate faithfulness averages if available
         faithfulness_metrics = [m.get("faithfulness") for m in all_metrics if "faithfulness" in m]
         avg_faithfulness = None
         
@@ -378,8 +309,6 @@ class BatchEvaluator:
                 "avg_evidence_coverage": sum(f["evidence_coverage"] for f in faithfulness_metrics) / len(faithfulness_metrics),
                 "avg_citation_coverage": sum(f.get("citation_coverage", 0) for f in faithfulness_metrics) / len(faithfulness_metrics)
             }
-        
-        # Group by configuration
         by_similarity = {}
         by_top_k = {}
         
@@ -393,8 +322,7 @@ class BatchEvaluator:
             if k not in by_top_k:
                 by_top_k[k] = []
             by_top_k[k].append(result)
-        
-        # Calculate per-group averages
+
         similarity_stats = {}
         for sim, group_results in by_similarity.items():
             group_metrics = [get_metrics(r) for r in group_results]
@@ -425,23 +353,10 @@ class BatchEvaluator:
         }
     
     def export_to_csv(self, results_data: Dict[str, Any], output_path: str) -> str:
-        """
-        Export batch results to CSV format.
-        
-        Args:
-            results_data: Results from run_batch_experiment
-            output_path: Path to save CSV file
-        
-        Returns:
-            Path to saved CSV file
-        """
-        
         results = results_data.get("results", [])
         
         if not results:
             raise ValueError("No results to export")
-        
-        # Define CSV columns
         fieldnames = [
             "run_number",
             "question_idx",
@@ -450,7 +365,7 @@ class BatchEvaluator:
             "similarity_method",
             "embedding_model",
             "top_k",
-            "model",  # For ask, or model_1 for compare, or answer_model for critique
+            "model", 
             "temperature",
             "answer_length",
             "answer_word_count",
@@ -471,14 +386,10 @@ class BatchEvaluator:
                 
                 config = result["configuration"]
                 operation = config["operation"]
-                
-                # Get metrics (handle compare which has nested structure)
                 metrics = result.get("metrics", {})
                 if "model_1" in metrics:
-                    # Compare operation - use model_1 metrics
                     metrics = metrics["model_1"]
-                
-                # Build base row
+
                 row = {
                     "run_number": result.get("run_number"),
                     "question_idx": result.get("question_idx"),
@@ -494,16 +405,12 @@ class BatchEvaluator:
                     "latency_seconds": metrics.get("latency_seconds", 0),
                     "answer": result.get("answer", "")
                 }
-                
-                # Add model info based on operation type
                 if operation == "ask":
                     row["model"] = config.get("model", "default")
                 elif operation == "compare":
                     row["model"] = f"{config['models'][0]} vs {config['models'][1]}"
                 elif operation == "critique":
                     row["model"] = f"{config.get('answer_model', 'default')} (critic: {config.get('critic_model', 'default')})"
-                
-                # Add faithfulness metrics if available
                 if "faithfulness" in metrics:
                     row["hallucination_risk"] = metrics["faithfulness"].get("hallucination_risk")
                     row["evidence_coverage"] = metrics["faithfulness"].get("evidence_coverage")
@@ -512,18 +419,7 @@ class BatchEvaluator:
         
         return output_path
     
-    def export_to_json(self, results_data: Dict[str, Any], output_path: str) -> str:
-        """
-        Export batch results to JSON format.
-        
-        Args:
-            results_data: Results from run_batch_experiment
-            output_path: Path to save JSON file
-        
-        Returns:
-            Path to saved JSON file
-        """
-        
+    def export_to_json(self, results_data: Dict[str, Any], output_path: str) -> str:        
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(results_data, f, indent=2, ensure_ascii=False)
         
@@ -531,18 +427,6 @@ class BatchEvaluator:
 
 
 def create_sample_question_set(topic: str = "general", count: int = 20) -> List[str]:
-    """
-    Create a sample set of questions for batch evaluation.
-    
-    Args:
-        topic: Topic category for questions
-        count: Number of questions to generate
-    
-    Returns:
-        List of questions
-    """
-    
-    # This is a placeholder - in production, you'd want more sophisticated question generation
     sample_questions = [
         "What are the main findings discussed in the document?",
         "Can you summarize the key points?",

@@ -10,9 +10,7 @@ from app.schemas import (
 )
 
 MAX_REPORT_SOURCE_CHARS = 40000 
-
 CHUNK_SIZE_CHARS = 10000
-
 SAFE_MAX_PROMPT_CHARS = 20000
 
 def _chunk_text_by_chars(text: str, max_chars: int) -> List[str]:
@@ -42,12 +40,6 @@ def _summarize_long_document(
     model: Optional[str] = None,
     chunk_size: int = CHUNK_SIZE_CHARS,
 ) -> str:
-    """
-    Use the full document but process it in multiple LLM calls:
-        pass
-    - Summarize each chunk separately.
-    - Concatenate the partial summaries into a 'meta-document'.
-    """
     parts = _chunk_text_by_chars(full_text, chunk_size)
     if len(parts) == 1:
         return parts[0]
@@ -189,15 +181,7 @@ def generate_document_report(
     username: Optional[str] = None,
     is_guest: bool = False,
 ) -> DocumentReport:
-    """
-    Generate a rich study report for a document.
-
-    - For smaller documents (len <= max_chars), use the raw text directly.
-    - For larger ones, first summarize in chunks, then build the report from the combined summary.
-    """
-    
     full_text = get_document_text(doc_name, max_chars=None, username=username, is_guest=is_guest)
-    
     
     if not full_text or len(full_text.strip()) == 0:
         raise ValueError(f"Document '{doc_name}' not found or is empty for user")
@@ -215,10 +199,8 @@ def generate_document_report(
         )
 
     source_text = _truncate_for_prompt(source_text)
-
     prompt = _build_report_prompt(source_text)
     raw = llm.complete(prompt, model=model, max_tokens=2048, temperature=0.0)
-
     data = _safe_parse_json_object(raw)
 
     def as_list_of_str(value: Any) -> List[str]:

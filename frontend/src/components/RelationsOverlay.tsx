@@ -22,7 +22,7 @@ export default function RelationsOverlay({
           <div>
             <h2 className="text-sm font-semibold">Relations between documents</h2>
             <p className="text-[11px] text-slate-400">
-              High-level themes and pairwise relationships between your uploaded
+              High level themes and pairwise relationships between your uploaded
               documents.
             </p>
           </div>

@@ -192,7 +192,7 @@ function summarizeDrift(rounds: CritiqueRound[]) {
   const first = rounds[0];
   const last = rounds[rounds.length - 1];
 
-  const sim = computeAnswerSimilarity(first.answer, last.answer); // 0–1
+  const sim = computeAnswerSimilarity(first.answer, last.answer);
   let label: string;
   if (sim >= 0.8) label = "Low drift (very similar answers)";
   else if (sim >= 0.5) label = "Moderate drift (refined or rephrased)";
@@ -646,12 +646,10 @@ const SIMILARITY_LABELS: Record<SimilarityMetric, string> = {
 };
 
 function App() {
-  // Auth state
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [isGuestUser, setIsGuestUser] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-
   const [documents, setDocuments] = useState<string[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | undefined>();
   const [docVersion, setDocVersion] = useState(0);

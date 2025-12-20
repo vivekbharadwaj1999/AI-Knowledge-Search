@@ -32,15 +32,6 @@ def add_embeddings(
     username: Optional[str] = None,
     is_guest: bool = False
 ) -> None:
-    """
-    Add embeddings to the vector store.
-    
-    Args:
-        texts: List of text chunks
-        embeddings: List of embedding vectors
-        doc_name: Name of the document
-        embedding_model: Name of the embedding model used (optional)
-    """
     vector_store_path = get_vector_store_path(username, is_guest)
     _ensure_dir(vector_store_path)
     with open(vector_store_path, "a", encoding="utf-8") as f:
@@ -141,19 +132,6 @@ def similarity_search(
     username: Optional[str] = None,
     is_guest: bool = False,
 ) -> List[Dict[str, Any]]:
-    """
-    Return top-k records most similar to the query.
-
-    Each record is a dict with at least:
-      - "doc_name": str
-      - "text": str
-      - "embedding": List[float]
-      - "score": float (similarity to the query)
-      - "embedding_model": str (optional)
-
-    - If doc_name is None, search across ALL documents.
-    - If doc_name is provided, restrict the search to that single document.
-    """
     records = _load_records(username, is_guest)
     if not records:
         return []

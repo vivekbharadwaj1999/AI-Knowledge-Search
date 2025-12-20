@@ -139,19 +139,6 @@ def ingest_file(
     username: Optional[str] = None,
     is_guest: bool = False,
 ) -> int:
-    """
-    Ingest a file and store embeddings.
-    
-    Args:
-        file_path: Path to the file to ingest
-        doc_name: Name to store the document under
-        chunk_size: Size of text chunks
-        chunk_overlap: Overlap between chunks
-        embedding_model: Name of the embedding model to use (optional)
-    
-    Returns:
-        Number of chunks created
-    """
     if not os.path.exists(file_path):
         raise FileNotFoundError(file_path)
 

@@ -1,8 +1,3 @@
-"""
-Operations logging for comprehensive experiment tracking.
-Logs all ask, compare, and critique operations with full parameter provenance.
-"""
-
 import json
 import os
 from datetime import datetime
@@ -11,7 +6,6 @@ from typing import Optional, List, Dict, Any
 
 
 def get_user_operations_log_path(username: str, is_guest: bool = False) -> str:
-    """Get the path to the user's operations log file."""
     if is_guest:
         return f"data/guests/{username}/operations_log.jsonl"
     return f"data/users/{username}/operations_log.jsonl"
@@ -32,7 +26,6 @@ def log_ask_operation(
     username: Optional[str],
     is_guest: bool = False,
 ) -> None:
-    """Log an ask operation with all parameters."""
     try:
         log_entry = {
             "operation": "ask",
@@ -80,7 +73,6 @@ def log_compare_operation(
     username: Optional[str],
     is_guest: bool = False,
 ) -> None:
-    """Log a compare operation with all parameters."""
     try:
         log_entry = {
             "operation": "compare",
@@ -128,7 +120,6 @@ def log_advanced_analysis_operation(
     username: Optional[str],
     is_guest: bool = False,
 ) -> None:
-    """Log an advanced analysis operation (ask/compare/critique with all methods)."""
     try:
         log_entry = {
             "operation": f"advanced_{operation}",
@@ -165,7 +156,6 @@ def log_critique_operation(
     username: Optional[str],
     is_guest: bool = False,
 ) -> None:
-    """Log a critique operation with all parameters and rounds."""
     try:
         log_entry = {
             "operation": "critique",
@@ -206,7 +196,6 @@ def _write_log_entry(
     username: Optional[str],
     is_guest: bool = False,
 ) -> None:
-    """Write a log entry to the user's operations log file."""
     if not username:
         return
     
@@ -221,7 +210,6 @@ def get_operations_log(
     username: str,
     is_guest: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Get all operations log entries for a user."""
     log_path = Path(get_user_operations_log_path(username, is_guest))
     
     if not log_path.exists():
@@ -245,7 +233,6 @@ def reset_operations_log(
     username: str,
     is_guest: bool = False,
 ) -> None:
-    """Reset (delete) the operations log for a user."""
     log_path = Path(get_user_operations_log_path(username, is_guest))
     
     if log_path.exists():
@@ -256,7 +243,6 @@ def check_operations_log_exists(
     username: str,
     is_guest: bool = False,
 ) -> bool:
-    """Check if operations log exists and has entries."""
     log_path = Path(get_user_operations_log_path(username, is_guest))
     
     if not log_path.exists():

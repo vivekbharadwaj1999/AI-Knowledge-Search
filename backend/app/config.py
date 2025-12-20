@@ -21,16 +21,16 @@ DEFAULT_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
 DEFAULT_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
 
 GROQ_AVAILABLE_MODELS: Dict[str, str] = {
-    "llama-3.1-8b-instant": "Llama 3.1 8B Instant – fast, lightweight",
-    "llama-3.3-70b-versatile": "Llama 3.3 70B Versatile – high-quality general model",
-    "meta-llama/llama-4-scout-17b-16e-instruct": "Llama 4 Scout 17B 16E – efficient, balanced",
-    "meta-llama/llama-4-maverick-17b-128e-instruct": "Llama 4 Maverick 17B 128E – strong reasoning",
-    "openai/gpt-oss-20b": "GPT OSS 20B – reliable all-round model",
-    "openai/gpt-oss-120b": "GPT OSS 120B – high-capacity model",
-    "meta-llama/llama-guard-4-12b": "Llama Guard 4 12B – safety model",
-    "openai/gpt-oss-safeguard-20b": "GPT OSS Safeguard 20B – safety model",
-    "moonshotai/kimi-k2-instruct-0905": "Kimi K2 Instruct 0905 – very large 256k context",
-    "qwen/qwen3-32b": "Qwen3 32B – multilingual & strong general model",
+    "llama-3.1-8b-instant": "Llama 3.1 8B Instant - fast, lightweight",
+    "llama-3.3-70b-versatile": "Llama 3.3 70B Versatile - high-quality general model",
+    "meta-llama/llama-4-scout-17b-16e-instruct": "Llama 4 Scout 17B 16E - efficient, balanced",
+    "meta-llama/llama-4-maverick-17b-128e-instruct": "Llama 4 Maverick 17B 128E - strong reasoning",
+    "openai/gpt-oss-20b": "GPT OSS 20B - reliable all-round model",
+    "openai/gpt-oss-120b": "GPT OSS 120B - high-capacity model",
+    "meta-llama/llama-guard-4-12b": "Llama Guard 4 12B - safety model",
+    "openai/gpt-oss-safeguard-20b": "GPT OSS Safeguard 20B - safety model",
+    "moonshotai/kimi-k2-instruct-0905": "Kimi K2 Instruct 0905 - very large 256k context",
+    "qwen/qwen3-32b": "Qwen3 32B - multilingual & strong general model",
 }
 
 class LLMClient:
@@ -70,55 +70,55 @@ EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 
 AVAILABLE_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
     "all-MiniLM-L6-v2": {
-        "label": "SBERT – all-MiniLM-L6-v2",
+        "label": "SBERT - all-MiniLM-L6-v2",
         "type": "local",
         "dimension": 384,
         "description": "Fast, lightweight model (local, free)"
     },
     "BAAI/bge-base-en-v1.5": {
-        "label": "BGE – bge-base-en-v1.5",
+        "label": "BGE - bge-base-en-v1.5",
         "type": "local",
         "dimension": 768,
         "description": "Strong general-purpose model (local, free)"
     },
     "intfloat/e5-base": {
-        "label": "E5 – e5-base",
+        "label": "E5 - e5-base",
         "type": "local",
         "dimension": 768,
         "description": "Efficient embedding model (local, free)"
     },
     "intfloat/multilingual-e5-base": {
-        "label": "E5 – multilingual-e5-base",
+        "label": "E5 - multilingual-e5-base",
         "type": "local",
         "dimension": 768,
         "description": "Multilingual support (local, free)"
     },
     "hkunlp/instructor-large": {
-        "label": "INSTRUCTOR – instructor-large",
+        "label": "INSTRUCTOR - instructor-large",
         "type": "local",
         "dimension": 768,
         "description": "High quality, instruction-aware (local, free, heavier)"
     },
     "Alibaba-NLP/gte-large-en-v1.5": {
-        "label": "GTE – Alibaba GTE-large (v1.5)",
+        "label": "GTE - Alibaba GTE-large (v1.5)",
         "type": "local",
         "dimension": 1024,
         "description": "State-of-the-art quality, matches OpenAI (local, free)"
     },
     "jinaai/jina-embeddings-v2-base-en": {
-        "label": "Jina AI – v2-base-en",
+        "label": "Jina AI - v2-base-en",
         "type": "local",
         "dimension": 768,
         "description": "Optimized for long documents, 8K context (local, free)"
     },
     "text-embedding-3-small": {
-        "label": "OpenAI – text-embedding-3-small",
+        "label": "OpenAI - text-embedding-3-small",
         "type": "openai",
         "dimension": 1536,
         "description": "OpenAI's efficient model (API, paid)"
     },
     "text-embedding-3-large": {
-        "label": "OpenAI – text-embedding-3-large",
+        "label": "OpenAI - text-embedding-3-large",
         "type": "openai",
         "dimension": 3072,
         "description": "OpenAI's highest quality model (API, paid)"

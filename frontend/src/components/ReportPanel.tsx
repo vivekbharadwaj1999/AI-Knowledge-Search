@@ -49,7 +49,7 @@ export default function ReportPanel({
             {report.title || lastDocName || "AI Study Report"}
           </h2>
           <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-400">
-            Auto-generated from your uploaded document
+            Auto generated from your uploaded document
           </p>
         </div>
         <span
