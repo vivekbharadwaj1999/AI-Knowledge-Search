@@ -30,7 +30,7 @@ const steps: Step[] = [
       "VivBot starts in guest mode for instant access. Create an account to save your uploaded documents and logs permanently.",
     points: [
       "**Guest mode (default)**: When you open VivBot, you automatically start as a guest with full feature access.",
-      "**Guest data is temporary**: All uploaded documents, embeddings, and critique logs are deleted when you close the browser.",
+      "**Guest data is temporary**: All uploaded documents, embeddings, and operation logs are deleted when you close the browser.",
       "**Create an account**: Click 'Login/Signup' in the top right to create an account.",
       "**Account benefits**: Your documents, vector embeddings, and critique logs persist forever. You can logout and login anytime without losing data.",
       "**Data isolation**: Each user's data is completely separate. Guests and logged in users each have their own private storage.",
@@ -146,25 +146,42 @@ const steps: Step[] = [
     ],
   },
   {
+    id: "batch",
+    navLabel: "Batch evaluation",
+    title: "9. Batch evaluation (experimental grid)",
+    description:
+      "Batch Evaluation runs systematic experiments across multiple questions and configurations to generate comparative data.",
+    points: [
+      "**Access**: Click 'Batch Evaluation' button at the bottom of the screen to open the panel.",
+      "**Questions**: Add multiple questions to test systematically. Each question will be evaluated across all selected configurations.",
+      "**Operations**: Select which operations to run - Ask, Compare (with model pairs), or Critique (with answer/critic model pairs).",
+      "**Grid parameters**: Configure similarity methods (Cosine, Dot, L2, L1, Hybrid), and Top K values (1-20) to test.",
+      "**Faithfulness metrics**: Enable to calculate evidence coverage, hallucination risk, and sentence level support for each answer.",
+      "**Vector normalization**: Enable to control whether embeddings are L2 normalized before scoring.",
+      "**Run evaluation**: Generates a comprehensive results table with all combinations of settings, showing answers, metrics, and sources.",
+      "**Export results**: Download complete evaluation data as JSON for further analysis.",
+    ],
+  },
+  {
     id: "logs",
     navLabel: "Operations logging",
-    title: "9. Operations logging & export",
+    title: "10. Operations logging & export",
     description:
       "VivBot automatically logs every Ask, Compare, and Critique operation with complete parameter settings for research.",
-    points:[
-        "**Automatic logging**: Every operation (Ask, Compare, Critique) is logged with all parameters: question, models, Top K, similarity metric, document scope, and complete results.",
-        "**Export logs**: Click 'Export logs (JSON)' at the bottom of the operations panel to download all logged operations as a single JSON file.",
-        "**Reset logs**: Click 'Reset logs' to clear all logged operations and start fresh. Requires confirmation to prevent accidental deletion.",
-        "**What gets logged**: Questions, answers, context chunks, sources with similarity scores, model names, retrieval parameters, and for Critique: all rounds, scores, and improvements.",
-        "**Compare logging**: Compare operations are logged as unified entries with both left and right model results, making analysis easier than separate Ask entries.",
-        "**Buttons disabled when empty**: Export and Reset buttons are disabled when no operations have been logged yet.",
-      ]
+    points: [
+      "**Automatic logging**: Every operation (Ask, Compare, Critique) is logged with all parameters: question, models, Top K, similarity metric, document scope, and complete results.",
+      "**Export logs**: Click 'Export logs (JSON)' at the bottom of the operations panel to download all logged operations as a single JSON file.",
+      "**Reset logs**: Click 'Reset logs' to clear all logged operations and start fresh. Requires confirmation to prevent accidental deletion.",
+      "**What gets logged**: Questions, answers, context chunks, sources with similarity scores, model names, retrieval parameters, and for Critique: all rounds, scores, and improvements.",
+      "**Compare logging**: Compare operations are logged as unified entries with both left and right model results, making analysis easier than separate Ask entries.",
+      "**Buttons disabled when empty**: Export and Reset buttons are disabled when no operations have been logged yet.",
+    ]
     ,
   },
   {
     id: "advanced",
     navLabel: "Advanced analysis",
-    title: "9. Advanced analysis",
+    title: "11. Advanced analysis",
     description:
       "Advanced analysis runs a deeper, structured breakdown of an existing Ask / Compare / Critique result using the same scope, Top K, and normalization but with every similarity function. It includes Answer Stability analysis to measure how retrieval methods affect outputs.",
     points: [
@@ -172,6 +189,17 @@ const steps: Step[] = [
       "This generates an additional analysis that helps you inspect the result more deeply (useful for research / evaluation).",
       "**Answer Stability (Experimental)**: Shows how consistent answers are across different retrieval methods using semantic (embedding cosine) and lexical (ROUGE-L) similarity.",
       "**Temperature Control**: Adjust temperature (0-2) and click 'Recompute' to explore how LLM sampling affects answer stability. Each experiment is saved to history.",
+      "**Faithfulness & Groundedness**: Analyzes how well answers are supported by retrieved evidence.",
+      "- **Evidence Coverage**: Percentage of answer sentences supported by retrieved chunks (higher = better grounding).",
+      "- **Hallucination Risk**: Percentage of answer sentences with no supporting evidence (lower = better).",
+      "- **Sentence level Evidence**: Shows each answer sentence with its confidence score and supporting chunks, helping identify which parts are well grounded vs potentially hallucinated.",
+      "- **Citation Coverage**: Percentage of sentences with direct source citations.",
+      "**Counterfactual Retrieval (Stress Testing)**: Tests how answers change when retrieval is modified.",
+      "- **Remove Top Chunk**: Removes the highest ranked chunk to test dependence on top results.",
+      "- **Remove Top 3**: Removes the top 3 chunks for stronger stress testing.",
+      "- **Reverse Order**: Reverses chunk ranking to see if order matters.",
+      "- **Random Shuffle**: Randomizes chunk order to test stability.",
+      "- **Metrics**: Answer similarity (semantic, ROUGE-L, Jaccard), chunk overlap, and retrieval dependence score.",
       "**Export JSON**: Includes complete history of all advanced analysis information for research analysis.",
       "If your retrieval settings change (scope / Top K / normalization), rerun the operation to analyze the new grounding context.",
     ],
@@ -179,7 +207,7 @@ const steps: Step[] = [
   {
     id: "output",
     navLabel: "Output panel",
-    title: "10. Output panel on the right",
+    title: "12. Output panel on the right",
     description:
       "All results show up as separate cards on the right side of the screen.",
     points: [

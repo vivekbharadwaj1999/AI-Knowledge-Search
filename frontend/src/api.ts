@@ -2,20 +2,38 @@ import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-let authToken: string | null = localStorage.getItem("auth_token");
-let isGuestMode: boolean = localStorage.getItem("is_guest") === "true";
+const oldIsGuest = localStorage.getItem("is_guest");
+if (oldIsGuest === "true") {
+  localStorage.removeItem("auth_token");
+  localStorage.removeItem("is_guest");
+  console.log("Cleared old guest session from localStorage");
+}
+
+let authToken: string | null = sessionStorage.getItem("auth_token") || localStorage.getItem("auth_token");
+let isGuestMode: boolean = sessionStorage.getItem("is_guest") === "true" || localStorage.getItem("is_guest") === "true";
 
 export function setAuthToken(token: string | null, isGuest: boolean = false) {
   authToken = token;
   isGuestMode = isGuest;
   
   if (token) {
-    localStorage.setItem("auth_token", token);
-    localStorage.setItem("is_guest", isGuest ? "true" : "false");
+    if (isGuest) {
+      sessionStorage.setItem("auth_token", token);
+      sessionStorage.setItem("is_guest", "true");
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("is_guest");
+    } else {
+      localStorage.setItem("auth_token", token);
+      localStorage.setItem("is_guest", "false");
+      sessionStorage.removeItem("auth_token");
+      sessionStorage.removeItem("is_guest");
+    }
     axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   } else {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("is_guest");
+    sessionStorage.removeItem("auth_token");
+    sessionStorage.removeItem("is_guest");
     delete axios.defaults.headers.common["Authorization"];
   }
 }
@@ -495,7 +513,7 @@ export async function runCounterfactualAnalysis(params: {
   similarity?: string;
   embedding_model?: string;
   temperature?: number;
-  original_answer?: string;
+  original_answer?: string; 
 }): Promise<any> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
