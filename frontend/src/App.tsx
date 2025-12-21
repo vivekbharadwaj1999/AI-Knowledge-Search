@@ -57,7 +57,7 @@ function MarkdownText({ text }: { text: string }) {
             <span className="text-slate-100 break-words">{children}</span>
           ),
           pre: ({ children }) => (
-            <div className="whitespace-pre-wrap break-words text-slate-100 font-sans text-xs leading-relaxed my-2">
+            <div className="whitespace-pre-wrap break-words text-slate-100 font-sans text-sm leading-relaxed my-2">
               {children}
             </div>
           ),
@@ -390,7 +390,25 @@ const STOPWORDS = new Set([
 ]);
 
 function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function calculateSimilarity(s1: string, s2: string): number {
+  if (s1 === s2) return 1.0;
+  
+  if (s1.includes(s2) || s2.includes(s1)) {
+    const shorter = Math.min(s1.length, s2.length);
+    const longer = Math.max(s1.length, s2.length);
+    return shorter / longer;
+  }
+  
+  const words1 = new Set(s1.split(/\s+/).filter(w => w.length > 2));
+  const words2 = new Set(s2.split(/\s+/).filter(w => w.length > 2));
+  const intersection = new Set([...words1].filter(w => words2.has(w)));
+  const union = new Set([...words1, ...words2]);
+  
+  if (union.size === 0) return 0;
+  return intersection.size / union.size;
 }
 
 function highlightWithKeywords(text: string, phrases: string[]) {
@@ -424,6 +442,43 @@ function highlightWithKeywords(text: string, phrases: string[]) {
   );
 }
 
+function extractAnswerKeywords(answer: string, contextChunks: string[], question: string): string[] {
+  const stopwordsExtended = new Set([...STOPWORDS, "the", "and", "for", "with", "this", "that", "from", "have", "has", "had", "will", "can", "could", "would", "should"]);
+  
+  const answerWords = new Set(
+    answer.toLowerCase()
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !stopwordsExtended.has(w))
+  );
+  
+  const contextText = contextChunks.join(" ").toLowerCase();
+  const contextWords = contextText
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopwordsExtended.has(w));
+  
+  const wordFreq = new Map<string, number>();
+  contextWords.forEach(w => {
+    wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
+  });
+  
+  const sharedWords = [...answerWords].filter(w => wordFreq.has(w));
+  
+  const importantContextWords = Array.from(wordFreq.entries())
+    .filter(([word, freq]) => freq >= 2 && word.length > 3)
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word)
+    .slice(0, 15);
+  
+  const questionWords = new Set(
+    question.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+  );
+  
+  const allKeywords = new Set([...sharedWords, ...importantContextWords]);
+  const keywordsWithoutQuestion = [...allKeywords].filter(w => !questionWords.has(w));
+  
+  return keywordsWithoutQuestion.slice(0, 25);
+}
+
 function renderHighlightedChunk(
   text: string,
   message: Message,
@@ -432,12 +487,22 @@ function renderHighlightedChunk(
   if (mode === "off") return text;
 
   const insights = message.insights;
+  const answer = message.answer || "";
+  const contextChunks = message.context || [text];
 
   if (mode === "keywords") {
-    const phrases =
-      insights?.keywords && insights.keywords.length > 0
-        ? insights.keywords
-        : message.question.split(/\s+/);
+    let phrases: string[] = [];
+    
+    if (insights?.keywords && insights.keywords.length > 0) {
+      phrases = insights.keywords;
+    } else if (answer) {
+      phrases = extractAnswerKeywords(answer, contextChunks, message.question);
+    }
+    
+    if (phrases.length === 0) {
+      phrases = message.question.split(/\s+/).filter(w => w.length > 3 && !STOPWORDS.has(w));
+    }
+    
     return highlightWithKeywords(text, phrases);
   }
 
@@ -447,13 +512,16 @@ function renderHighlightedChunk(
   if (insights?.sentence_importance && insights.sentence_importance.length > 0) {
     for (let i = 0; i < sentences.length; i++) {
       const s = sentences[i];
-      const lower = s.toLowerCase();
+      const lower = s.toLowerCase().trim();
       let maxScore = 0;
 
       for (const item of insights.sentence_importance) {
         const sn = item.sentence.toLowerCase().trim();
         if (!sn) continue;
-        if (lower.includes(sn) || sn.includes(lower)) {
+        
+        const similarity = calculateSimilarity(lower, sn);
+        
+        if (similarity > 0.6) {
           if (item.score > maxScore) maxScore = item.score;
         }
       }
@@ -461,25 +529,34 @@ function renderHighlightedChunk(
     }
   }
 
-  if (scores.every((s) => s === 0)) {
-    const tokens = (insights?.keywords || message.question.split(/\s+/))
-      .map((t) => t.toLowerCase().trim())
-      .filter((t) => t.length > 2 && !STOPWORDS.has(t));
+  if (scores.every((s) => s === 0) && answer) {
+    const answerLower = answer.toLowerCase();
+    
+    const answerPhrases = answerLower
+      .match(/\b\w+(?:\s+\w+){2,4}\b/g) || [];
+    
+    const answerKeywords = extractAnswerKeywords(answer, contextChunks, message.question);
 
     scores = sentences.map((s) => {
       const lower = s.toLowerCase();
       let sc = 0;
-      tokens.forEach((t) => {
-        if (lower.includes(t)) sc++;
+      
+      answerPhrases.forEach((phrase) => {
+        if (lower.includes(phrase)) sc += 3;
       });
+      
+      answerKeywords.forEach((keyword) => {
+        if (lower.includes(keyword)) sc += 2;
+      });
+      
       return sc;
     });
   }
 
-  const tokensForPhrases =
+  const tokensForPhrases = 
     insights?.keywords && insights.keywords.length > 0
       ? insights.keywords
-      : message.question.split(/\s+/);
+      : (answer ? extractAnswerKeywords(answer, contextChunks, message.question) : []);
 
   const scoredIndices = scores
     .map((s, i) => ({ score: s, index: i }))
@@ -492,8 +569,8 @@ function renderHighlightedChunk(
   scoredIndices.sort((a, b) => b.score - a.score);
 
   const maxSentences = Math.min(
-    5,
-    Math.max(1, Math.round(sentences.length * 0.3))
+    8,
+    Math.max(2, Math.round(sentences.length * 0.4))
   );
   const keep = new Set<number>();
   for (const { index } of scoredIndices.slice(0, maxSentences)) {
@@ -506,11 +583,10 @@ function renderHighlightedChunk(
     const content = sentence + (idx < sentences.length - 1 ? " " : "");
     const sc = scores[idx];
 
-    if (!keep.has(idx) || sc <= 0) {
-      return <span key={idx}>{content}</span>;
-    }
-
     if (mode === "sentences") {
+      if (!keep.has(idx) || sc <= 0) {
+        return <span key={idx}>{content}</span>;
+      }
       return (
         <span
           key={idx}
@@ -519,6 +595,10 @@ function renderHighlightedChunk(
           {content}
         </span>
       );
+    }
+
+    if (!keep.has(idx) || sc <= 0) {
+      return <span key={idx}>{highlightWithKeywords(content, tokensForPhrases)}</span>;
     }
 
     let wrapperClass = "";
