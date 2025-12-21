@@ -134,7 +134,7 @@ function Block({
       <div className={`text-[10px] font-semibold uppercase mb-2 ${titleClass}`}>
         {title}
       </div>
-      <div className="text-xs text-slate-100 whitespace-pre-wrap leading-relaxed">
+      <div className="text-xs text-slate-100 whitespace-pre-wrap break-words leading-relaxed overflow-hidden">
         {children}
       </div>
     </div>
@@ -563,7 +563,7 @@ export default function UnifiedAnalysisModal({
               </div>
 
               <div className="bg-slate-800/40 rounded p-2">
-                <div className="text-[9px] text-slate-400 mb-1">Redundancy</div>
+                <div className="text-[9px] text-slate-400 mb-1 truncate">Redundancy</div>
                 <div className={`text-sm font-bold ${methodData.extended_metrics.retrieval_quality.chunk_redundancy > 0.5 ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {(methodData.extended_metrics.retrieval_quality.chunk_redundancy * 100).toFixed(1)}%
                 </div>
@@ -1507,10 +1507,10 @@ export default function UnifiedAnalysisModal({
                                   </div>
                                 )}
 
-                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
                                   <div className="bg-slate-800/40 rounded p-2">
                                     <div className="text-[8px] text-slate-400 mb-2 font-semibold">Answer Similarity</div>
-                                    <div className="flex gap-3 items-center">
+                                    <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
                                       <div className="flex-1">
                                         <div className="text-[7px] text-slate-500 mb-0.5">Semantic</div>
                                         <div className={`text-xs font-bold ${
@@ -1571,7 +1571,7 @@ export default function UnifiedAnalysisModal({
                                   </div>
                                 )}
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                   <div className="text-[9px] text-slate-400 mb-2">Original Chunks & Answer</div>
                                   <div className="flex flex-wrap gap-1 mb-2">

@@ -36,8 +36,8 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
   const [compareModelRight, setCompareModelRight] = useState("llama-3.3-70b-versatile");
   const [critiqueAnswerModel, setCritiqueAnswerModel] = useState("llama-3.1-8b-instant");
   const [critiqueCriticModel, setCritiqueCriticModel] = useState("llama-3.3-70b-versatile");
-  const [critiqueSelfCorrect, setCritiqueSelfCorrect] = useState(true);
-  
+  const [critiqueSelfCorrect, setCritiqueSelfCorrect] = useState(false);
+
   const MAX_QUESTIONS = 20;
 
   useEffect(() => {
@@ -47,23 +47,23 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
       }, 100);
     }
   }, [results]);
-  
+
   const handleAddQuestion = () => {
     if (questionInput.trim() && questions.length < MAX_QUESTIONS) {
       setQuestions([...questions, questionInput.trim()]);
       setQuestionInput("");
     }
   };
-  
+
   const canRunBatch = documents.length > 0 &&
-                      questions.length > 0 && 
-                      selectedMethods.length > 0 && 
-                      selectedTopK.length > 0 &&
-                      (enableAsk || enableCompare || enableCritique);
-  
+    questions.length > 0 &&
+    selectedMethods.length > 0 &&
+    selectedTopK.length > 0 &&
+    (enableAsk || enableCompare || enableCritique);
+
   const handleRunBatch = async () => {
     if (!canRunBatch) return;
-    
+
     setIsRunning(true);
     try {
       const operations = [];
@@ -87,7 +87,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
           self_correct: critiqueSelfCorrect
         });
       }
-      
+
       const payload = {
         questions: questions,
         similarity_methods: selectedMethods.length > 0 ? selectedMethods : undefined,
@@ -97,7 +97,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
         include_faithfulness: includeFaithfulness,
         operations: operations
       };
-      
+
       const result = await runBatchEvaluation(payload);
       setResults(result);
     } catch (error) {
@@ -107,18 +107,18 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
       setIsRunning(false);
     }
   };
-  
+
   const handleExport = async () => {
     if (!results) return;
-    
+
     try {
       const jsonStr = JSON.stringify(results, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
-                        new Date().toTimeString().split(' ')[0].replace(/:/g, '');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' +
+        new Date().toTimeString().split(' ')[0].replace(/:/g, '');
       const filename = `batch_eval_${timestamp}.json`;
-      
+
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
@@ -131,7 +131,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
       alert("Export failed. See console for details.");
     }
   };
-  
+
   const toggleMethod = (method: string) => {
     if (selectedMethods.includes(method)) {
       setSelectedMethods(selectedMethods.filter(m => m !== method));
@@ -139,7 +139,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
       setSelectedMethods([...selectedMethods, method]);
     }
   };
-  
+
   const toggleTopK = (k: number) => {
     if (selectedTopK.includes(k)) {
       setSelectedTopK(selectedTopK.filter(v => v !== k));
@@ -147,7 +147,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
       setSelectedTopK([...selectedTopK, k]);
     }
   };
-  
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-slate-900 rounded-lg p-6 max-w-6xl w-full max-h-[90vh] overflow-y-auto">
@@ -186,13 +186,13 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 Add
               </button>
             </div>
-            
+
             {questions.length >= MAX_QUESTIONS && (
               <div className="text-xs text-amber-400 mb-2">
                 Maximum {MAX_QUESTIONS} questions reached
               </div>
             )}
-            
+
             {questions.length > 0 && (
               <div className="space-y-1 max-h-48 overflow-y-auto bg-slate-800/30 rounded p-2">
                 {questions.map((q, idx) => (
@@ -213,10 +213,10 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
 
           <div className="border border-slate-700 rounded-lg p-4 bg-slate-800/30">
             <div className="text-sm text-slate-300 font-semibold mb-3">Operations to Run</div>
-            
+
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 min-w-[80px]">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 sm:min-w-[80px]">
                   <input
                     type="checkbox"
                     checked={enableAsk}
@@ -225,12 +225,12 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                   />
                   <span className="font-semibold">Ask:</span>
                 </label>
-                
+
                 <select
                   value={askModel}
                   onChange={(e) => setAskModel(e.target.value)}
                   disabled={!enableAsk}
-                  className="flex-1 bg-slate-800 text-slate-100 px-2 py-1 rounded text-[11px] sm:text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {MODEL_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -238,8 +238,8 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 </select>
               </div>
 
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 min-w-[80px]">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 sm:min-w-[80px]">
                   <input
                     type="checkbox"
                     checked={enableCompare}
@@ -248,32 +248,34 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                   />
                   <span className="font-semibold">Compare:</span>
                 </label>
-                
-                <select
-                  value={compareModelLeft}
-                  onChange={(e) => setCompareModelLeft(e.target.value)}
-                  disabled={!enableCompare}
-                  className="flex-1 bg-slate-800 text-slate-100 px-2 py-1 rounded text-[11px] sm:text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {MODEL_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                
-                <select
-                  value={compareModelRight}
-                  onChange={(e) => setCompareModelRight(e.target.value)}
-                  disabled={!enableCompare}
-                  className="flex-1 bg-slate-800 text-slate-100 px-2 py-1 rounded text-[11px] sm:text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {MODEL_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+
+                <div className="flex-1 grid grid-cols-2 gap-2">
+                  <select
+                    value={compareModelLeft}
+                    onChange={(e) => setCompareModelLeft(e.target.value)}
+                    disabled={!enableCompare}
+                    className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {MODEL_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={compareModelRight}
+                    onChange={(e) => setCompareModelRight(e.target.value)}
+                    disabled={!enableCompare}
+                    className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {MODEL_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100 min-w-[80px]">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100">
                   <input
                     type="checkbox"
                     checked={enableCritique}
@@ -282,30 +284,32 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                   />
                   <span className="font-semibold">Critique:</span>
                 </label>
-                
-                <select
-                  value={critiqueAnswerModel}
-                  onChange={(e) => setCritiqueAnswerModel(e.target.value)}
-                  disabled={!enableCritique}
-                  className="flex-1 bg-slate-800 text-slate-100 px-2 py-1 rounded text-[11px] sm:text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {MODEL_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                
-                <select
-                  value={critiqueCriticModel}
-                  onChange={(e) => setCritiqueCriticModel(e.target.value)}
-                  disabled={!enableCritique}
-                  className="flex-1 bg-slate-800 text-slate-100 px-2 py-1 rounded text-[11px] sm:text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {MODEL_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                
-                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer hover:text-slate-300 whitespace-nowrap">
+
+                <div className="flex-1 grid grid-cols-2 gap-2">
+                  <select
+                    value={critiqueAnswerModel}
+                    onChange={(e) => setCritiqueAnswerModel(e.target.value)}
+                    disabled={!enableCritique}
+                    className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {MODEL_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={critiqueCriticModel}
+                    onChange={(e) => setCritiqueCriticModel(e.target.value)}
+                    disabled={!enableCritique}
+                    className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {MODEL_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer hover:text-slate-300">
                   <input
                     type="checkbox"
                     checked={critiqueSelfCorrect}
@@ -317,8 +321,9 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 </label>
               </div>
             </div>
+
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-slate-300 mb-2 font-semibold">
@@ -344,12 +349,12 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 ))}
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm text-slate-300 mb-2 font-semibold">
                 Top-K Values
               </label>
-              <div className="grid grid-cols-4 gap-2 bg-slate-800/30 rounded p-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-800/30 rounded p-3">
                 {Array.from({ length: 20 }, (_, i) => i + 1).map(k => (
                   <label key={k} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100">
                     <input
@@ -364,7 +369,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
               </div>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-slate-300 mb-2 font-semibold">
@@ -381,7 +386,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 ))}
               </select>
             </div>
-            
+
             <div className="flex flex-col justify-end space-y-2">
               <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100">
                 <input
@@ -392,7 +397,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 />
                 <span className="font-semibold">Normalize vectors</span>
               </label>
-              
+
               <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-slate-100">
                 <input
                   type="checkbox"
@@ -415,9 +420,9 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
         >
           {isRunning ? "Running evaluation..." : !canRunBatch ? (
             !documents.length ? "Upload documents to enable" :
-            !questions.length ? "Add questions to enable" : 
-            !(enableAsk || enableCompare || enableCritique) ? "Select at least one operation" :
-            "Configure settings to enable"
+              !questions.length ? "Add questions to enable" :
+                !(enableAsk || enableCompare || enableCritique) ? "Select at least one operation" :
+                  "Configure settings to enable"
           ) : `Run Batch Evaluation (${questions.length} question${questions.length !== 1 ? 's' : ''})`}
         </button>
 
@@ -432,7 +437,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 Download JSON
               </button>
             </div>
-            
+
             <div className="bg-slate-800/40 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-2">Experiment Metadata</div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
@@ -462,21 +467,21 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                   {results.summary.overall.avg_latency_seconds.toFixed(2)}s
                 </div>
               </div>
-              
+
               <div className="bg-slate-800 rounded p-3">
                 <div className="text-xs text-slate-400 mb-1">Avg Answer Length</div>
                 <div className="text-2xl font-bold text-sky-400">
                   {results.summary.overall.avg_answer_length.toFixed(0)}
                 </div>
               </div>
-              
+
               <div className="bg-slate-800 rounded p-3">
                 <div className="text-xs text-slate-400 mb-1">Avg Chunks</div>
                 <div className="text-2xl font-bold text-violet-400">
                   {results.summary.overall.avg_chunks_retrieved.toFixed(1)}
                 </div>
               </div>
-              
+
               {results.summary.faithfulness && (
                 <div className="bg-slate-800 rounded p-3">
                   <div className="text-xs text-slate-400 mb-1">Avg Evidence Coverage</div>
@@ -486,7 +491,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 </div>
               )}
             </div>
-            
+
             <div className="text-sm text-slate-400 bg-slate-800/40 rounded p-3">
               <div className="font-semibold text-slate-300 mb-1">✓ Batch evaluation complete</div>
               <div>Full results saved. Use export buttons above to download detailed data for analysis.</div>
