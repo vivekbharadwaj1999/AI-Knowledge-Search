@@ -49,12 +49,26 @@ function MarkdownText({ text }: { text: string }) {
 
   return (
     <div
-      className="prose prose-invert prose-sm max-w-none
+      className="prose prose-invert prose-sm max-w-none break-words
                  prose-p:my-1 prose-li:my-0.5 prose-ul:ml-4 prose-ol:ml-4">
-      <ReactMarkdown>{cleaned}</ReactMarkdown>
+      <ReactMarkdown
+        components={{
+          code: ({ children }) => (
+            <span className="text-slate-100 break-words">{children}</span>
+          ),
+          pre: ({ children }) => (
+            <div className="whitespace-pre-wrap break-words text-slate-100 font-sans text-xs leading-relaxed my-2">
+              {children}
+            </div>
+          ),
+        }}
+      >
+        {cleaned}
+      </ReactMarkdown>
     </div>
   );
 }
+
 
 const PROMPT_TIP_LABELS: Record<PromptIssueTag, string> = {
   missing_context: "Add more context",

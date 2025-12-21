@@ -114,8 +114,8 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
           Index settings
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-[minmax(340px,1fr)_auto_auto] gap-4 items-end">
-          <div className="min-w-0">
+        <div className="space-y-4">
+          <div>
             <div className="text-[11px] font-semibold text-slate-300 tracking-wide uppercase mb-2">
               Embedding model
             </div>
@@ -155,107 +155,108 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
                 </>
               )}
             </select>
+            {selectedModelInfo && (
+              <p className="mt-2 text-[11px] text-slate-400">
+                {selectedModelInfo.description}
+                {selectedModelInfo.type === "openai"}
+              </p>
+            )}
           </div>
 
-          <div className="w-fit">
-            <div className="text-[11px] font-semibold sm:pl-8 text-slate-300 tracking-wide uppercase mb-2">
-              Chunk size
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-[11px] font-semibold text-slate-300 tracking-wide uppercase mb-2">
+                Chunk size
+              </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setChunkSize((s) => Math.max(200, s - 200))}
-                className="flex h-7 w-7 items-center justify-center rounded-full
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChunkSize((s) => Math.max(200, s - 200))}
+                  className="flex h-7 w-7 items-center justify-center rounded-full
                            border border-slate-600 bg-slate-900
                            text-xs text-slate-100 hover:bg-slate-800"
-                aria-label="Decrease chunk size"
-              >
-                <span className="text-xl pb-1">–</span>
-              </button>
+                  aria-label="Decrease chunk size"
+                >
+                  <span className="text-xl pb-1">–</span>
+                </button>
 
-              <input
-                type="text"
-                inputMode="numeric"
-                value={chunkSize}
-                onChange={(e) => {
-                  const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
-                  if (Number.isNaN(raw)) return;
-                  const clamped = Math.min(4000, Math.max(200, raw));
-                  const snapped = Math.round(clamped / 200) * 200;
-                  setChunkSize(snapped);
-                }}
-                className="w-14 rounded-md border border-slate-700 bg-slate-800
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={chunkSize}
+                  onChange={(e) => {
+                    const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                    if (Number.isNaN(raw)) return;
+                    const clamped = Math.min(4000, Math.max(200, raw));
+                    const snapped = Math.round(clamped / 200) * 200;
+                    setChunkSize(snapped);
+                  }}
+                  className="w-14 rounded-md border border-slate-700 bg-slate-800
                            px-2 py-1 text-xs text-slate-100 text-center
                            focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
+                />
 
-              <button
-                type="button"
-                onClick={() => setChunkSize((s) => Math.min(4000, s + 200))}
-                className="flex h-7 w-7 items-center justify-center rounded-full
+                <button
+                  type="button"
+                  onClick={() => setChunkSize((s) => Math.min(4000, s + 200))}
+                  className="flex h-7 w-7 items-center justify-center rounded-full
                            border border-slate-600 bg-slate-900
                            text-xs text-slate-100 hover:bg-slate-800"
-                aria-label="Increase chunk size"
-              >
-                <span className="text-xl pb-1">+</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="w-fit">
-            <div className="text-[11px] font-semibold sm:pl-10 text-slate-300 tracking-wide uppercase mb-2">
-              Overlap
+                  aria-label="Increase chunk size"
+                >
+                  <span className="text-xl pb-1">+</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setChunkOverlap((o) => Math.max(0, o - 20))}
-                className="flex h-7 w-7 items-center justify-center rounded-full
+            <div>
+              <div className="text-[11px] font-semibold text-slate-300 tracking-wide uppercase mb-2">
+                Overlap
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChunkOverlap((o) => Math.max(0, o - 20))}
+                  className="flex h-7 w-7 items-center justify-center rounded-full
                            border border-slate-600 bg-slate-900
                            text-xs text-slate-100 hover:bg-slate-800"
-                aria-label="Decrease overlap"
-              >
-                <span className="text-xl pb-1">–</span>
-              </button>
+                  aria-label="Decrease overlap"
+                >
+                  <span className="text-xl pb-1">–</span>
+                </button>
 
-              <input
-                type="text"
-                inputMode="numeric"
-                value={chunkOverlap}
-                onChange={(e) => {
-                  const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
-                  if (Number.isNaN(raw)) return;
-                  const clamped = Math.min(200, Math.max(0, raw));
-                  const snapped = Math.round(clamped / 20) * 20;
-                  setChunkOverlap(snapped);
-                }}
-                className="w-14 rounded-md border border-slate-700 bg-slate-800
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={chunkOverlap}
+                  onChange={(e) => {
+                    const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                    if (Number.isNaN(raw)) return;
+                    const clamped = Math.min(200, Math.max(0, raw));
+                    const snapped = Math.round(clamped / 20) * 20;
+                    setChunkOverlap(snapped);
+                  }}
+                  className="w-14 rounded-md border border-slate-700 bg-slate-800
                            px-2 py-1 text-xs text-slate-100 text-center
                            focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
+                />
 
-              <button
-                type="button"
-                onClick={() => setChunkOverlap((o) => Math.min(200, o + 20))}
-                className="flex h-7 w-7 items-center justify-center rounded-full
+                <button
+                  type="button"
+                  onClick={() => setChunkOverlap((o) => Math.min(200, o + 20))}
+                  className="flex h-7 w-7 items-center justify-center rounded-full
                            border border-slate-600 bg-slate-900
                            text-xs text-slate-100 hover:bg-slate-800"
-                aria-label="Increase overlap"
-              >
-                <span className="text-xl pb-1">+</span>
-              </button>
+                  aria-label="Increase overlap"
+                >
+                  <span className="text-xl pb-1">+</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
-
-        {selectedModelInfo && (
-          <p className="mt-2 text-[11px] text-slate-400">
-            {selectedModelInfo.description}
-            {selectedModelInfo.type === "openai"}
-          </p>
-        )}
 
         <p className="mt-2 text-[11px] text-slate-400">
           Chunk size controls how much text goes into each chunk. Chunk overlap repeats part of the
