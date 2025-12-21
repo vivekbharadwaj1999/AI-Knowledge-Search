@@ -1,62 +1,120 @@
 import json
+import re
 from typing import Any, Dict, List, Optional
 from app.config import LLMClient
 
 def _build_insights_prompt(question: str, answer: str, context: List[str]) -> str:
     joined_context = "\n\n---\n\n".join(context)
-    return f"""
-You are an assistant that analyzes an answer and its supporting context.
+    return f"""Analyze this question-answer pair and its context.
 
-Question:
-    pass
-{question}
+Question: {question}
 
-Answer:
-    pass
-{answer}
+Answer: {answer}
 
-Context:
-    pass
-{joined_context}
+Context: {joined_context}
 
-Return a STRICT JSON object with the following keys:
-    pass
+You must respond with ONLY a valid JSON object. Do not include any text before or after the JSON.
 
-- summary: short summary of the answer (string)
-- key_points: list of 3-7 key bullet points (array of strings)
-- entities: list of important entities (array of strings)
-- suggested_questions: list of 3-5 follow-up questions (array of strings)
-- mindmap: compact text representation of a mindmap (string)
-- reading_difficulty: one of "beginner", "intermediate", "advanced" (string)
-- sentiment: short sentiment label like "neutral", "positive", "critical" (string)
-- keywords: list of important keywords/phrases (array of strings)
-- highlights: OPTIONAL list of groups of phrases to highlight (array of array of strings)
-- sentence_importance: array of objects, each with:
-    - sentence: an important sentence from the CONTEXT (string)
-    - score: integer from 0 to 5 indicating importance
-      (5 = absolutely key, 3 = helpful, 1 = minor, 0 = irrelevant)
+Required JSON structure:
+{{
+  "summary": "comprehensive summary of the answer in 4-6 sentences",
+  "key_points": ["point 1", "point 2", "point 3"],
+  "entities": ["entity1", "entity2"],
+  "suggested_questions": ["question 1?", "question 2?", "question 3?"],
+  "mindmap": "Topic\\n- Point 1\\n- Point 2",
+  "reading_difficulty": "beginner",
+  "sentiment": "neutral",
+  "keywords": ["keyword1", "keyword2"],
+  "sentence_importance": [
+    {{"sentence": "exact sentence from context", "score": 5}}
+  ]
+}}
 
-IMPORTANT:
-    pass
-- Different context chunks may be tagged like "[Source: DOC_NAME]" to indicate
-  different documents. If they clearly disagree, briefly reflect that in
-  key_points or sentiment.
-- Only return valid JSON, no commentary.
-- For sentence_importance, include at most 15 sentences, pick those that
-  best explain or support the answer for this question.
-"""
+CRITICAL RULES:
 
-def _safe_parse_json_object(raw: str) -> Dict[str, Any]:
+For summary:
+- Write EXACTLY 4-6 complete sentences (not more, not less)
+- Each sentence must end with proper punctuation (. ! ?)
+- Cover the main points comprehensively
+- Include key facts, numbers, and specifics from the answer
+- Make it informative and detailed enough to understand the answer without reading it
+- DO NOT truncate mid-sentence
+
+For entities:
+- Extract ALL named entities from the answer and context
+- Include: people, organizations, companies, universities, institutions
+- Include: technologies, frameworks, programming languages, tools, platforms
+- Include: specific projects, products, systems mentioned by name
+- Include: locations, cities, countries
+- Include: degrees, certifications, qualifications
+- Include: time periods, dates, durations (e.g., "3.5 years")
+- Provide 10-12 entities maximum (6 to 8 is ideal)
+
+For sentence_importance:
+- score 5: sentence content was directly used or paraphrased in the answer
+- score 4: sentence provided specific facts/data that appear in the answer
+- score 3: sentence provided essential background for the answer
+- score 2: sentence was tangentially related
+- score 1: sentence was minimally relevant
+- score 0: sentence was not used
+
+Include only sentences with score >= 3. Maximum 15 sentences.
+Copy sentences EXACTLY as they appear in context.
+
+For keywords: include meaningful technical terms, domain-specific words, important concepts, and key nouns from the context. Focus on words that someone searching for this information would use. Include 10-20 keywords.
+
+Respond with ONLY the JSON object, nothing else."""
+
+def _extract_json_from_response(raw: str) -> Dict[str, Any]:
+    raw = raw.strip()
+    
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        code_lines = []
+        in_code = False
+        for line in lines:
+            if line.strip().startswith("```"):
+                in_code = not in_code
+                continue
+            if in_code:
+                code_lines.append(line)
+        raw = "\n".join(code_lines)
+    
+    raw = re.sub(r'^[^{]*', '', raw)
+    raw = re.sub(r'[^}]*$', '', raw)
+    
     start = raw.find("{")
     end = raw.rfind("}")
+    
     if start == -1 or end == -1 or end <= start:
         return {}
-
+    
     snippet = raw[start: end + 1]
+    
     try:
         return json.loads(snippet)
     except json.JSONDecodeError:
-        return {}
+        try:
+            snippet = re.sub(r',(\s*[}\]])', r'\1', snippet)
+            return json.loads(snippet)
+        except json.JSONDecodeError:
+            return {}
+
+def _get_default_insights(question: str, answer: str) -> Dict[str, Any]:
+    words = answer.split()
+    summary = " ".join(words[:50]) + ("..." if len(words) > 50 else "")
+    
+    return {
+        "summary": summary,
+        "key_points": ["Information extracted from context"],
+        "entities": [],
+        "suggested_questions": ["Can you provide more details?"],
+        "mindmap": "Main Topic\n- Key Point",
+        "reading_difficulty": "intermediate",
+        "sentiment": "neutral",
+        "keywords": list(set([w.lower() for w in question.split() if len(w) > 3][:10])),
+        "sentence_importance": []
+    }
 
 def generate_insights(
     question: str,
@@ -66,9 +124,16 @@ def generate_insights(
 ) -> Dict[str, Any]:
     llm = LLMClient()
     prompt = _build_insights_prompt(question, answer, context)
-    raw = llm.complete(prompt, model=model)
-
-    data = _safe_parse_json_object(raw)
+    
+    try:
+        raw = llm.complete(prompt, model=model)
+        data = _extract_json_from_response(raw)
+        
+        if not data or not isinstance(data, dict):
+            return _get_default_insights(question, answer)
+        
+    except Exception:
+        return _get_default_insights(question, answer)
 
     def as_list_of_str(value: Any) -> List[str]:
         if not isinstance(value, list):
@@ -93,11 +158,21 @@ def generate_insights(
         return out
 
     summary = str(data.get("summary", "") or "")
+    if not summary:
+        summary = _get_default_insights(question, answer)["summary"]
 
     key_points = as_list_of_str(data.get("key_points", []))
+    if not key_points:
+        key_points = ["Information from context"]
+        
     entities = as_list_of_str(data.get("entities", []))
     suggested_questions = as_list_of_str(data.get("suggested_questions", []))
+    if not suggested_questions:
+        suggested_questions = ["Can you elaborate on this?"]
+        
     keywords = as_list_of_str(data.get("keywords", []))
+    if not keywords:
+        keywords = list(set([w.lower() for w in question.split() if len(w) > 3][:10]))
 
     mindmap_raw = data.get("mindmap", "")
     if isinstance(mindmap_raw, list):
@@ -105,9 +180,12 @@ def generate_insights(
         mindmap = "\n".join(flat)
     else:
         mindmap = str(mindmap_raw or "")
+    
+    if not mindmap:
+        mindmap = "Topic\n- Key Information"
 
-    reading_difficulty = str(data.get("reading_difficulty", "") or "")
-    sentiment = str(data.get("sentiment", "") or "")
+    reading_difficulty = str(data.get("reading_difficulty", "") or "intermediate")
+    sentiment = str(data.get("sentiment", "") or "neutral")
 
     highlights_raw = data.get("highlights", [])
     highlights: List[List[str]] = []
@@ -131,7 +209,8 @@ def generate_insights(
             except (TypeError, ValueError):
                 score = 0
             score = max(0, min(5, score))
-            sentence_importance.append({"sentence": text, "score": score})
+            if score >= 3:
+                sentence_importance.append({"sentence": text, "score": score})
 
     return {
         "summary": summary,
