@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const oldIsGuest = localStorage.getItem("is_guest");
 if (oldIsGuest === "true") {
@@ -80,6 +80,26 @@ export async function logout(): Promise<void> {
   } catch (err) {
     console.error("Logout error:", err);
   }
+}
+
+export function cleanupGuestOnUnload(): void {
+  if (!authToken || !isGuestMode) {
+    return;
+  }
+  
+  const url = `${API_BASE}/auth/logout-beacon?token=${encodeURIComponent(authToken)}`;
+  
+  try {
+    const blob = new Blob([], { type: "text/plain" });
+    navigator.sendBeacon(url, blob);
+  } catch (err) {
+    console.error("Beacon error:", err);
+  }
+  
+  authToken = null;
+  isGuestMode = false;
+  sessionStorage.removeItem("auth_token");
+  sessionStorage.removeItem("is_guest");
 }
 
 export async function deleteAccount(): Promise<void> {

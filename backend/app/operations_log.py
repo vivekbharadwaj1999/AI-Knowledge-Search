@@ -199,11 +199,14 @@ def _write_log_entry(
     if not username:
         return
     
-    log_path = get_user_operations_log_path(username, is_guest)
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    try:
+        log_path = get_user_operations_log_path(username, is_guest)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    except (OSError, FileNotFoundError):
+        pass
 
 
 def get_operations_log(

@@ -3,14 +3,12 @@ import math
 import os
 from typing import Any, Dict, List, Optional
 
-VECTOR_STORE_PATH = os.path.join("data", "vector_store.jsonl")
-
 def get_vector_store_path(username: Optional[str] = None, is_guest: bool = False) -> str:
     if username:
         if is_guest:
             return f"data/guests/{username}/vector_store.jsonl"
         return f"data/users/{username}/vector_store.jsonl"
-    return VECTOR_STORE_PATH
+    return os.path.join("data", "vector_store.jsonl")
 
 def _l2_norm(v: List[float]) -> float:
     return math.sqrt(sum(x * x for x in v))
@@ -61,25 +59,6 @@ def _load_records(username: Optional[str] = None, is_guest: bool = False) -> Lis
             except json.JSONDecodeError:
                 continue
     return records
-
-def get_latest_doc_name(username: Optional[str] = None, is_guest: bool = False) -> Optional[str]:
-    if not os.path.exists(VECTOR_STORE_PATH):
-        return None
-
-    last: Optional[Dict[str, Any]] = None
-    with open(vector_store_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                last = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-    if last is None:
-        return None
-    return last.get("doc_name")
 
 def get_document_embedding_model(doc_name: str, username: Optional[str] = None, is_guest: bool = False) -> Optional[str]:
     records = _load_records(username, is_guest)

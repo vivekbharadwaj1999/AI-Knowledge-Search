@@ -127,6 +127,57 @@ def cleanup_guest_data(guest_id: str):
     if guest_id in GUEST_SESSIONS:
         del GUEST_SESSIONS[guest_id]
 
+
+def sweep_orphan_guests(max_age_seconds: int = 1800) -> int:
+    import shutil
+    import time
+    
+    guests_root = Path("data/guests")
+    if not guests_root.exists():
+        return 0
+    
+    now = time.time()
+    deleted = 0
+    
+    for guest_dir in guests_root.iterdir():
+        if not guest_dir.is_dir():
+            continue
+        if not guest_dir.name.startswith("guest_"):
+            continue
+        if guest_dir.name in GUEST_SESSIONS:
+            continue
+        
+        latest_mtime = guest_dir.stat().st_mtime
+        for path in guest_dir.rglob("*"):
+            try:
+                mtime = path.stat().st_mtime
+                if mtime > latest_mtime:
+                    latest_mtime = mtime
+            except (OSError, FileNotFoundError):
+                continue
+        
+        age = now - latest_mtime
+        if age > max_age_seconds:
+            guest_id = guest_dir.name
+            try:
+                shutil.rmtree(guest_dir)
+                deleted += 1
+            except OSError:
+                pass
+    
+    return deleted
+
+
+def touch_guest_dir(guest_id: str) -> None:
+    import time
+    guest_path = Path(f"data/guests/{guest_id}")
+    if guest_path.exists():
+        now = time.time()
+        try:
+            os.utime(guest_path, (now, now))
+        except OSError:
+            pass
+
 def delete_user_account(username: str) -> bool:
     import shutil
     

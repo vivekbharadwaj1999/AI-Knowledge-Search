@@ -12,7 +12,6 @@ from app.config import EmbeddingClient
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
-UPLOAD_DIR = "data/raw"
 
 def read_pdf_text(file_path: str) -> str:
     reader = PdfReader(file_path)
