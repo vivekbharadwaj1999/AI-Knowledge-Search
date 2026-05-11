@@ -1,4 +1,6 @@
 import os
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
@@ -27,7 +29,7 @@ from app.schemas import (
     AuthResponse,
     UserResponse,
 )
-from app.ingest import ingest_file, UPLOAD_DIR
+from app.ingest import ingest_file
 from app.qa import answer_question
 from app.vector_store import list_documents, clear_vector_store
 from app.config import GROQ_MODEL, AVAILABLE_EMBEDDING_MODELS, get_embedding_dimension
@@ -46,6 +48,8 @@ from app.auth import (
     get_user_upload_dir,
     get_user_critique_log_path,
     cleanup_guest_data,
+    sweep_orphan_guests,
+    touch_guest_dir,
     delete_user_account,
 )
 from app.operations_log import (
@@ -59,7 +63,44 @@ from app.operations_log import (
 )
 from fastapi.responses import JSONResponse
 
-app = FastAPI(title="AI Knowledge Search Engine")
+GUEST_SWEEP_INTERVAL_SECONDS = 600
+GUEST_SWEEP_MAX_AGE_SECONDS = 7200
+
+
+async def _periodic_guest_sweep():
+    while True:
+        try:
+            await asyncio.sleep(GUEST_SWEEP_INTERVAL_SECONDS)
+            deleted = sweep_orphan_guests(GUEST_SWEEP_MAX_AGE_SECONDS)
+            if deleted:
+                print(f"[guest-sweep] removed {deleted} orphan guest session(s)")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[guest-sweep] error: {e}")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    try:
+        deleted = sweep_orphan_guests(GUEST_SWEEP_MAX_AGE_SECONDS)
+        if deleted:
+            print(f"[guest-sweep] startup removed {deleted} orphan guest session(s)")
+    except Exception as e:
+        print(f"[guest-sweep] startup error: {e}")
+    
+    task = asyncio.create_task(_periodic_guest_sweep())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="AI Knowledge Search Engine", lifespan=lifespan)
 
 origins = [
     "http://localhost:5173",
@@ -76,8 +117,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 
 async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict]:
     if not authorization:
@@ -88,7 +127,16 @@ async def get_current_user_optional(authorization: Optional[str] = Header(None))
 
     token = authorization[7:] 
     user_data = decode_token(token)
+    if user_data and user_data.get("is_guest"):
+        touch_guest_dir(user_data["username"])
     return user_data
+
+
+async def require_user(authorization: Optional[str] = Header(None)) -> tuple[str, bool]:
+    user_info = await get_current_user_optional(authorization)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user_info["username"], user_info.get("is_guest", True)
 
 
 @app.get("/")
@@ -145,6 +193,18 @@ async def logout(authorization: Optional[str] = Header(None)):
     return {"status": "ok", "message": "Logged out"}
 
 
+@app.post("/auth/logout-beacon")
+async def logout_beacon(token: Optional[str] = None):
+    if not token:
+        return {"status": "ok"}
+    
+    user_data = decode_token(token)
+    if user_data and user_data.get("is_guest"):
+        cleanup_guest_data(user_data["username"])
+    
+    return {"status": "ok"}
+
+
 @app.delete("/auth/account")
 async def delete_account(authorization: Optional[str] = Header(None)):
     user_data = await get_current_user_optional(authorization)
@@ -188,9 +248,7 @@ async def ingest_document(
     embedding_model: str = Form("all-MiniLM-L6-v2"),
     authorization: Optional[str] = Header(None),
 ):
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
 
     allowed_exts = (".pdf", ".txt", ".csv", ".docx", ".pptx", ".xlsx")
     ext = os.path.splitext(file.filename)[1].lower()
@@ -249,9 +307,7 @@ async def ingest_document(
 
 @app.post("/ask", response_model=AskResponse)
 async def ask_question_route(payload: AskRequest, authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
 
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
@@ -303,9 +359,7 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
 
 @app.post("/compare", response_model=CompareResponse)
 async def compare_route(payload: CompareRequest, authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
 
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
@@ -393,20 +447,13 @@ async def insights_route(payload: InsightsRequest):
 
 @app.get("/documents")
 async def get_documents(authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
     return {"documents": list_documents(username, is_guest)}
 
 
 @app.post("/report", response_model=DocumentReport)
 async def create_report(req: ReportRequest, authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get(
-            "is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
 
     try:
         report = generate_document_report(
@@ -427,9 +474,7 @@ async def create_report(req: ReportRequest, authorization: Optional[str] = Heade
 
 @app.post("/document-relations", response_model=CrossDocRelations)
 async def document_relations_route(payload: CrossDocRelationsRequest, authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
     try:
         result = analyze_cross_document_relations(
             model=payload.model,
@@ -453,9 +498,7 @@ async def document_relations_route(payload: CrossDocRelationsRequest, authorizat
 
 @app.post("/critique", response_model=CritiqueResponse)
 async def critique_route(payload: CritiqueRequest, authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
 
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
@@ -503,12 +546,7 @@ async def critique_route(payload: CritiqueRequest, authorization: Optional[str] 
 
 @app.get("/critique-log-rows", response_model=CritiqueLogResponse)
 async def get_critique_log_rows(authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get(
-            "is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
 
     log_path = Path(get_user_critique_log_path(username, is_guest))
     if not log_path.exists():
@@ -579,12 +617,7 @@ async def get_critique_log_rows(authorization: Optional[str] = Header(None)):
 
 @app.get("/critique-log-exists")
 async def check_critique_log_exists(authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get(
-            "is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
 
     log_path = Path(get_user_critique_log_path(username, is_guest))
 
@@ -610,9 +643,7 @@ async def check_critique_log_exists(authorization: Optional[str] = Header(None))
 
 @app.post("/analyze")
 async def analyze_operation(payload: dict, authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
 
     operation = payload.get("operation", "").lower()
     normalize_vectors = bool(payload.get("normalize_vectors", True))
@@ -766,12 +797,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
 
 @app.post("/reset-critique-log")
 async def reset_critique_log_endpoint(authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get(
-            "is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
     reset_critique_log_file(username, is_guest)
     return {"status": "ok", "message": "Critique log reset"}
 
@@ -779,11 +805,7 @@ async def reset_critique_log_endpoint(authorization: Optional[str] = Header(None
 @app.get("/operations-log")
 async def get_operations_log_endpoint(authorization: Optional[str] = Header(None)):
     """Get all operations log entries for the current user."""
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get("is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
     
     entries = get_operations_log(username, is_guest)
     return {"entries": entries, "count": len(entries)}
@@ -792,11 +814,7 @@ async def get_operations_log_endpoint(authorization: Optional[str] = Header(None
 @app.get("/operations-log-exists")
 async def check_operations_log_exists_endpoint(authorization: Optional[str] = Header(None)):
     """Check if operations log exists and has entries."""
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get("is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
     
     exists = check_operations_log_exists(username, is_guest)
     
@@ -810,11 +828,7 @@ async def check_operations_log_exists_endpoint(authorization: Optional[str] = He
 @app.post("/reset-operations-log")
 async def reset_operations_log_endpoint(authorization: Optional[str] = Header(None)):
     """Reset (delete) the operations log for the current user."""
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get("is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
     
     reset_operations_log(username, is_guest)
     return {"status": "ok", "message": "Operations log reset"}
@@ -822,12 +836,7 @@ async def reset_operations_log_endpoint(authorization: Optional[str] = Header(No
 
 @app.delete("/documents")
 async def delete_all_documents(authorization: Optional[str] = Header(None)):
-    user_info = await get_current_user_optional(authorization)
-    if user_info:
-        username, is_guest = user_info["username"], user_info.get(
-            "is_guest", True)
-    else:
-        username, is_guest = "default", True
+    username, is_guest = await require_user(authorization)
 
     user_upload_dir = get_user_upload_dir(username, is_guest)
     if os.path.exists(user_upload_dir):
@@ -849,9 +858,7 @@ async def run_batch_evaluation(payload: dict, authorization: Optional[str] = Hea
     """Run batch evaluation across multiple configurations."""
     from app.batch_evaluation import BatchEvaluator
     
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
     questions = payload.get("questions", [])
     operations = payload.get("operations", [])
     similarity_methods = payload.get("similarity_methods")
@@ -890,9 +897,7 @@ async def export_batch_results(payload: dict, authorization: Optional[str] = Hea
     """Export batch evaluation results to JSON."""
     from app.batch_evaluation import BatchEvaluator
     
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
     
     results_data = payload.get("results")
     
@@ -917,9 +922,7 @@ async def export_batch_results(payload: dict, authorization: Optional[str] = Hea
 async def run_counterfactual(payload: dict, authorization: Optional[str] = Header(None)):
     from app.extended_analysis import run_counterfactual_analysis
     
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
     
     question = payload.get("question")
     original_chunks = payload.get("original_chunks", [])
@@ -947,9 +950,7 @@ async def run_counterfactual(payload: dict, authorization: Optional[str] = Heade
 async def debug_documents_metadata(authorization: Optional[str] = Header(None)):
     from app.vector_store import _load_records
     
-    user_info = await get_current_user_optional(authorization)
-    username = user_info["username"] if user_info else "default"
-    is_guest = user_info.get("is_guest", True) if user_info else True
+    username, is_guest = await require_user(authorization)
     records = _load_records(username, is_guest)
     docs = {}
     for rec in records:

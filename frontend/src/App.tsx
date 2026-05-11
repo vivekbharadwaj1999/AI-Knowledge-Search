@@ -34,6 +34,7 @@ import {
   fetchOperationsLog,
   checkOperationsLogExists,
   resetOperationsLog,
+  cleanupGuestOnUnload,
 } from "./api";
 
 
@@ -827,11 +828,41 @@ function App() {
     initAuth();
   }, []);
 
-  const handleAuthSuccess = (token: string, username: string, isGuest: boolean) => {
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      cleanupGuestOnUnload();
+    };
+    const handlePageHide = () => {
+      cleanupGuestOnUnload();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, []);
+
+  const handleAuthSuccess = async (token: string, username: string, isGuest: boolean) => {
+    if (isGuestUser && !isGuest) {
+      try {
+        await logout();
+      } catch (err) {
+        console.error("Guest cleanup failed:", err);
+      }
+    }
     setAuthToken(token, isGuest);
     setCurrentUsername(username);
     setIsGuestUser(isGuest);
+    setOutputFeed([]);
+    setMessages([]);
+    setComparisons([]);
+    setCritiques([]);
+    setShowContextFor(null);
     setDocVersion((v) => v + 1);
+    checkOperationsLogExists()
+      .then((result) => setHasOperationsLog(result.exists))
+      .catch(() => setHasOperationsLog(false));
   };
 
   const handleLogout = async () => {
@@ -862,6 +893,7 @@ function App() {
   };
 
   useEffect(() => {
+    if (!currentUsername) return;
     async function checkExistingLogs() {
       try {
         const opsResult = await checkOperationsLogExists();
@@ -872,9 +904,10 @@ function App() {
     }
 
     checkExistingLogs();
-  }, []);
+  }, [currentUsername]);
 
   useEffect(() => {
+    if (!currentUsername) return;
     fetchDocuments()
       .then((data) => {
         setDocuments(data.documents);
@@ -888,7 +921,7 @@ function App() {
       .catch((err) => {
         console.error("Failed to fetch documents", err);
       });
-  }, [docVersion]);
+  }, [docVersion, currentUsername]);
 
   useLayoutEffect(() => {
     function updateHeight() {

@@ -4,7 +4,7 @@ import { login, signup } from "../api";
 interface AuthModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (token: string, username: string, isGuest: boolean) => void;
+  onSuccess: (token: string, username: string, isGuest: boolean) => void | Promise<void>;
 }
 
 export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
@@ -35,7 +35,7 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
         ? await login(username, password)
         : await signup(username, password);
 
-      onSuccess(data.token, data.username, data.is_guest);
+      await onSuccess(data.token, data.username, data.is_guest);
       handleClose();
       window.location.reload();
     } catch (err: any) {

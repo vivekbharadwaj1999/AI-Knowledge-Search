@@ -20,9 +20,6 @@ PROMPT_ISSUE_TAGS = [
 QUALITY_STOP_THRESHOLD = 0.95
 MAX_HALLUCINATION_FOR_EARLY_STOP = 0.05
 
-CRITIQUE_LOG_PATH = Path(
-    os.getenv("CRITIQUE_LOG_PATH", "data/critique_log.jsonl")
-)
 
 def _safe_str(value: Any) -> str:
     if value is None:
@@ -162,8 +159,14 @@ def _safe_scores(data: Dict[str, Any]) -> Dict[str, Optional[float]]:
     }
 
 def reset_critique_log_file(username: Optional[str] = None, is_guest: bool = False) -> None:
-    if CRITIQUE_LOG_PATH.exists():
-        CRITIQUE_LOG_PATH.unlink()
+    if not username:
+        return
+    log_path = Path(get_user_critique_log_path(username, is_guest))
+    if log_path.exists():
+        try:
+            log_path.unlink()
+        except OSError:
+            pass
 
 def run_critique(
     question: str,
@@ -291,12 +294,15 @@ def run_critique(
             "embedding_model": embedding_model,
             "rounds": rounds,
         }
-        os.makedirs("data", exist_ok=True)
-        log_path = get_user_critique_log_path(username, is_guest) if username else "data/critique_log.jsonl"
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
-    except Exception as e:
-        print("Failed to write critique_log.jsonl:", e)
+        if username:
+            log_path = get_user_critique_log_path(username, is_guest)
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    except (OSError, FileNotFoundError):
+        pass
+    except Exception:
+        pass
 
     return {
         "question": question,
