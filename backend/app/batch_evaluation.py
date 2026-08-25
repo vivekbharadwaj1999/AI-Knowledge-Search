@@ -4,7 +4,7 @@ import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
-from app.config import EmbeddingClient, LLMClient, AVAILABLE_EMBEDDING_MODELS
+from app.config import EmbeddingClient, LLMClient
 from app.qa import answer_question, calculate_all_similarities
 from app.vector_store import similarity_search
 from app.faithfulness import calculate_faithfulness_metrics

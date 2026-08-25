@@ -8,6 +8,7 @@ from sentence_transformers import SentenceTransformer
 from app.models_catalog import (
     OPENROUTER_BASE_URL,
     get_catalog,
+    get_embedding_catalog,
     get_model_label,
     is_allowed,
 )
@@ -111,7 +112,11 @@ def get_available_models(include_all: bool = False) -> List[Dict]:
 
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 
-AVAILABLE_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
+# Locally-run models. These are genuinely fixed: the weights are downloaded to
+# disk by download_models.py, so the list is a property of this deployment
+# rather than of any provider's catalog. Free, private, no network at query
+# time -- but they hold the process's memory and slow startup.
+LOCAL_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
     "all-MiniLM-L6-v2": {
         "label": "SBERT - all-MiniLM-L6-v2",
         "type": "local",
@@ -154,26 +159,84 @@ AVAILABLE_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
         "dimension": 768,
         "description": "Optimized for long documents, 8K context (local, free)"
     },
+    # Legacy direct-to-OpenAI entries, kept so documents already indexed under
+    # these IDs still resolve. New indexing should use the openrouter/* variants
+    # served from the live catalog. Once nothing is indexed with these, delete
+    # them and OPENAI_API_KEY becomes unnecessary.
     "text-embedding-3-small": {
-        "label": "OpenAI - text-embedding-3-small",
+        "label": "OpenAI - text-embedding-3-small (direct)",
         "type": "openai",
         "dimension": 1536,
         "description": "OpenAI's efficient model (API, paid)"
     },
     "text-embedding-3-large": {
-        "label": "OpenAI - text-embedding-3-large",
+        "label": "OpenAI - text-embedding-3-large (direct)",
         "type": "openai",
         "dimension": 3072,
         "description": "OpenAI's highest quality model (API, paid)"
     }
 }
 
+# Dimensions learned from real responses. OpenRouter does not publish embedding
+# dimensions in its catalog, so the first successful embed records the true
+# vector length instead of guessing.
+_learned_dimensions: Dict[str, int] = {}
+
+
+def get_embedding_models(include_all: bool = False) -> Dict[str, Dict[str, any]]:
+    """
+    Local models plus the live OpenRouter embedding catalog, keyed by model ID.
+
+    Local entries are always present. Remote entries are refreshed from the
+    provider, so a retired embedding model stops being offered on its own.
+    """
+    merged: Dict[str, Dict[str, any]] = dict(LOCAL_EMBEDDING_MODELS)
+
+    try:
+        remote = get_embedding_catalog(include_all=include_all)
+    except Exception:
+        # The local models are enough to keep the app usable.
+        return merged
+
+    for model in remote:
+        price = model["prompt_price_per_m"]
+        cost = "free" if model["is_free"] else f"${price:.3f}/M tokens"
+        merged[model["id"]] = {
+            "label": f"{model['vendor']} - {model['label']}",
+            "type": "openrouter",
+            "dimension": _learned_dimensions.get(model["id"], 0),
+            "description": f"API via OpenRouter ({cost})",
+        }
+
+    return merged
+
+
+def is_valid_embedding_model(model_name: str) -> bool:
+    return model_name in get_embedding_models()
+
+
 class EmbeddingClient:
     def __init__(self, model_name: Optional[str] = None) -> None:
         self.model_name = model_name or EMBEDDING_MODEL_NAME
-        self.model_type = AVAILABLE_EMBEDDING_MODELS.get(self.model_name, {}).get("type", "local")
-        
-        if self.model_type == "openai":
+        self.model_type = get_embedding_models().get(self.model_name, {}).get("type", "local")
+
+        if self.model_type == "openrouter":
+            if not OPENROUTER_API_KEY:
+                raise RuntimeError(
+                    f"OPENROUTER_API_KEY required for embedding model '{self.model_name}'."
+                )
+            from openai import OpenAI
+            self.openai_client = OpenAI(
+                api_key=OPENROUTER_API_KEY,
+                base_url=OPENROUTER_BASE_URL,
+                default_headers={
+                    "HTTP-Referer": APP_PUBLIC_URL,
+                    "X-Title": APP_TITLE,
+                },
+            )
+            self.model = None
+        elif self.model_type == "openai":
+            # Legacy direct-to-OpenAI path, retained for already-indexed docs.
             if not OPENAI_API_KEY:
                 raise RuntimeError(
                     f"OpenAI API key required for model '{self.model_name}'. "
@@ -193,8 +256,8 @@ class EmbeddingClient:
         if not texts:
             return []
         
-        if self.model_type == "openai":
-            return self._embed_openai(texts)
+        if self.model_type in ("openai", "openrouter"):
+            return self._embed_api(texts)
         else:
             return self._embed_local(texts)
     
@@ -207,19 +270,29 @@ class EmbeddingClient:
         )
         return embeddings.tolist()
     
-    def _embed_openai(self, texts: List[str]) -> List[List[float]]:
+    def _embed_api(self, texts: List[str]) -> List[List[float]]:
+        """OpenAI-compatible embeddings call — works against OpenAI or OpenRouter."""
         batch_size = 2048
         all_embeddings = []
-        
+
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            response = self.openai_client.embeddings.create(
-                input=batch,
-                model=self.model_name
-            )
+            try:
+                response = self.openai_client.embeddings.create(
+                    input=batch,
+                    model=self.model_name,
+                )
+            except Exception as exc:
+                raise LLMError(
+                    f"Embedding model '{self.model_name}' failed: {exc}"
+                ) from exc
             batch_embeddings = [item.embedding for item in response.data]
             all_embeddings.extend(batch_embeddings)
-        
+
+        # Record the real vector length; the catalog does not publish it.
+        if all_embeddings:
+            _learned_dimensions[self.model_name] = len(all_embeddings[0])
+
         return all_embeddings
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -231,5 +304,7 @@ class EmbeddingClient:
         return self.embed([text])[0]
 
 def get_embedding_dimension(model_name: str) -> int:
-    model_info = AVAILABLE_EMBEDDING_MODELS.get(model_name, {})
-    return model_info.get("dimension", 384)
+    if model_name in _learned_dimensions:
+        return _learned_dimensions[model_name]
+    info = get_embedding_models().get(model_name, {})
+    return info.get("dimension") or 0
