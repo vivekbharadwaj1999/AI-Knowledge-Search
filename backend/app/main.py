@@ -1,8 +1,9 @@
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import List, Optional, Dict, Any
 import json
 from pathlib import Path
@@ -32,7 +33,14 @@ from app.schemas import (
 from app.ingest import ingest_file
 from app.qa import answer_question
 from app.vector_store import list_documents, clear_vector_store
-from app.config import GROQ_MODEL, AVAILABLE_EMBEDDING_MODELS, get_embedding_dimension
+from app.config import (
+    DEFAULT_MODEL,
+    LLMError,
+    AVAILABLE_EMBEDDING_MODELS,
+    get_embedding_dimension,
+    get_available_models,
+)
+from app.models_catalog import CatalogError, describe_rules
 from app.insights import generate_insights
 from app.report import generate_document_report
 from app.relations import analyze_cross_document_relations
@@ -116,6 +124,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Registered handlers run inside the middleware stack, so these responses pass
+# back through CORSMiddleware and keep their Access-Control-Allow-Origin header.
+# An unhandled exception would instead be caught above CORSMiddleware and reach
+# the browser stripped of CORS headers, surfacing as a misleading "blocked by
+# CORS policy" error rather than the real server fault.
+@app.exception_handler(LLMError)
+async def llm_error_handler(request: Request, exc: LLMError):
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+
+@app.exception_handler(CatalogError)
+async def catalog_error_handler(request: Request, exc: CatalogError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict]:
@@ -240,6 +263,29 @@ async def get_embedding_models():
     return {"models": models}
 
 
+@app.get("/llm-models")
+async def get_llm_models(all: bool = False, refresh: bool = False):
+    """
+    Live LLM catalog from OpenRouter.
+
+    Returns a curated, vendor-diverse subset by default -- the raw catalog is
+    ~300 models, which is not a usable dropdown. Pass ?all=true to inspect
+    everything the provider offers. Curation rules live in app/models_catalog.py
+    and are configurable via .env.
+    """
+    try:
+        models = get_available_models(include_all=all)
+    except CatalogError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    return {
+        "models": models,
+        "default": DEFAULT_MODEL,
+        "curated": not all,
+        "rules": describe_rules(),
+    }
+
+
 @app.post("/ingest")
 async def ingest_document(
     file: UploadFile = File(...),
@@ -331,7 +377,7 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
         is_guest=is_guest,
     )
 
-    model_used = payload.model or GROQ_MODEL
+    model_used = payload.model or DEFAULT_MODEL
 
     log_ask_operation(
         question=payload.question,

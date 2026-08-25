@@ -150,6 +150,35 @@ export async function fetchEmbeddingModels(): Promise<EmbeddingModel[]> {
   return res.data.models as EmbeddingModel[];
 }
 
+export type LLMModel = {
+  id: string;
+  label: string;
+  vendor: string;
+  vendor_key: string;
+  context_length: number;
+  prompt_price_per_m: number;
+  completion_price_per_m: number;
+  is_free: boolean;
+  description: string;
+};
+
+export type LLMModelsResponse = {
+  models: LLMModel[];
+  default: string;
+  curated: boolean;
+  rules: Record<string, unknown>;
+};
+
+/**
+ * Live LLM catalog. The backend fetches this from OpenRouter and curates it
+ * down to an affordable, vendor-diverse subset, so no model IDs are hardcoded
+ * anywhere in the frontend. Pass all=true to inspect the full provider catalog.
+ */
+export async function fetchLLMModels(all = false): Promise<LLMModelsResponse> {
+  const res = await axios.get(`${API_BASE}/llm-models`, { params: all ? { all: true } : {} });
+  return res.data as LLMModelsResponse;
+}
+
 export async function uploadFile(
   file: File,
   chunk_size: number,

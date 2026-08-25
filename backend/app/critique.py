@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from app.config import LLMClient, GROQ_MODEL
+from app.config import LLMClient, DEFAULT_MODEL
 from app.auth import get_user_critique_log_path
 
 PROMPT_ISSUE_TAGS = [
@@ -201,7 +201,7 @@ def run_critique(
     """
     from app.qa import answer_question
     llm = LLMClient()
-    critic = critic_model or GROQ_MODEL
+    critic = critic_model or DEFAULT_MODEL
 
     max_rounds = 2 if self_correct else 1
 
