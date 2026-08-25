@@ -296,6 +296,11 @@ class EmbeddingClient:
                 response = self.openai_client.embeddings.create(
                     input=batch,
                     model=self.model_name,
+                    # The OpenAI SDK defaults to base64 when this is omitted.
+                    # Several providers behind OpenRouter (Google AI Studio
+                    # among them) reject base64 outright, so ask for float
+                    # explicitly. Every provider accepts float.
+                    encoding_format="float",
                 )
             except Exception as exc:
                 raise LLMError(
