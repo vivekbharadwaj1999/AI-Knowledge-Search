@@ -46,10 +46,11 @@ const steps: Step[] = [
       "Start by uploading a document in section 1: “Upload & index a document”. Supported formats include PDF, TXT, CSV, DOCX, XLSX, and PPTX.",
     points: [
       "Click “Choose File” and pick a document from your computer.",
-      "Choose an **Embedding model** (local free options or OpenAI paid embeddings). This choice affects how your document is represented in vector space, and changing it requires re-indexing (Upload & Index again).",
+      "Choose an **Embedding model**. Local models run on the server for free and never send your text anywhere; API models are called through OpenRouter and show their per-token price next to the name (some are free). This choice affects how your document is represented in vector space, and changing it requires re-indexing (Upload & Index again).",
       "Adjust **Chunk size** to control how documents are split before indexing. Smaller chunks give finer grained retrieval, larger chunks preserve more context. Set **Chunk overlap** to repeat part of the previous chunk to preserve context across boundaries. Changing chunking settings also requires reuploading the document.",
       "Press “Upload & Index” to chunk the file and create vector embeddings.",
       "Once indexed, the document appears in the dropdown used by the later sections.",
+      "Both the LLM and embedding model lists are fetched live from OpenRouter rather than hardcoded, so retired models disappear on their own and new ones show up without an update.",
     ],
   },
   {
@@ -92,7 +93,7 @@ const steps: Step[] = [
       "Section 3 answers questions using only the selected document(s) or all documents as context.",
     points: [
       "Check the “Answering for document …” text to see which document is active.",
-      "Pick an LLM (for example LLaMA 3.1 8B Instant).",
+      "Pick an LLM from the dropdown. Models are grouped by the company that made them and show their input price, so you can weigh cost against capability before asking.",
       "Type a question about the selected document and press “Ask”.",
       "The answer appears on the right, together with the retrieved context.",
       "Use the **Highlight Context** after using Auto Insights on each answer card to inspect context and check highlighted parts of it:",
