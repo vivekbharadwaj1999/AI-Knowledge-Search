@@ -33,6 +33,41 @@ MAX_MODELS_PER_VENDOR = int(os.getenv("MODEL_MAX_PER_VENDOR", "3"))
 CATALOG_TTL_SECONDS = int(os.getenv("MODEL_CATALOG_TTL", "3600"))
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("MODEL_CATALOG_TIMEOUT", "15"))
 
+# Which labs to offer. Vendors are pinned here rather than models, on purpose:
+# a company name is stable in a way a model ID is not. "meta-llama" will still
+# be meta-llama next year; llama-3.1-8b-instant lasted nine months.
+#
+# OpenRouter carries ~48 vendors under any sane price ceiling, most of them
+# niche roleplay or coding-assistant shops. Without this the dropdown runs past
+# 100 entries. Set MODEL_VENDORS="" to allow every vendor, bounded by
+# MODEL_MAX_VENDORS.
+DEFAULT_VENDORS = [
+    "openai",
+    "anthropic",
+    "google",
+    "meta",
+    "meta-llama",
+    "mistralai",
+    "deepseek",
+    "qwen",
+    "moonshotai",
+    "x-ai",
+    "microsoft",
+    "amazon",
+    "cohere",
+    "nvidia",
+]
+_vendors_raw = os.getenv("MODEL_VENDORS")
+VENDOR_ALLOWLIST = (
+    [v.strip().lower() for v in _vendors_raw.split(",") if v.strip()]
+    if _vendors_raw is not None
+    else list(DEFAULT_VENDORS)
+)
+
+# Backstop used only when VENDOR_ALLOWLIST is empty: keep the vendors
+# contributing the most eligible models rather than all 48 of them.
+MAX_VENDORS = int(os.getenv("MODEL_MAX_VENDORS", "12"))
+
 # Models pinned here always survive curation, even if they breach the rules.
 # Comma-separated list of OpenRouter model IDs.
 PINNED_MODELS = [m.strip() for m in os.getenv("MODEL_ALLOWLIST", "").split(",") if m.strip()]
@@ -43,6 +78,7 @@ VENDOR_LABELS: Dict[str, str] = {
     "openai": "OpenAI",
     "anthropic": "Anthropic",
     "google": "Google",
+    "meta": "Meta",
     "meta-llama": "Meta",
     "mistralai": "Mistral",
     "moonshotai": "Moonshot (Kimi)",
@@ -109,6 +145,9 @@ def _normalize(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     output_modalities = architecture.get("output_modalities") or ["text"]
 
     vendor_key = model_id.split("/")[0] if "/" in model_id else "other"
+    # OpenRouter prefixes variant namespaces with "~" (e.g. "~google").
+    # Fold those into the parent vendor instead of inventing a new one.
+    vendor_key = vendor_key.lstrip("~").lower()
 
     return {
         "id": model_id,
@@ -162,16 +201,29 @@ def _curate(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Turn the full catalog into a short, vendor-diverse dropdown list."""
     eligible = [m for m in models if _is_eligible(m)]
 
+    if VENDOR_ALLOWLIST:
+        eligible = [m for m in eligible if m["vendor_key"] in VENDOR_ALLOWLIST]
+
+    # Group by display name rather than vendor key: OpenRouter splits some
+    # companies across several namespaces ("meta" and "meta-llama"), and keying
+    # on the raw prefix would hand each one its own quota.
     by_vendor: Dict[str, List[Dict[str, Any]]] = {}
     for model in sorted(
         eligible,
         key=lambda m: (-m["prompt_price_per_m"], -m["context_length"]),
     ):
-        by_vendor.setdefault(model["vendor_key"], []).append(model)
+        by_vendor.setdefault(model["vendor"], []).append(model)
+
+    # With no allowlist, keep only the best-represented vendors so an open
+    # configuration still yields a usable dropdown.
+    vendors = list(by_vendor)
+    if not VENDOR_ALLOWLIST and len(vendors) > MAX_VENDORS:
+        vendors.sort(key=lambda v: (-len(by_vendor[v]), v.lower()))
+        vendors = vendors[:MAX_VENDORS]
 
     curated: List[Dict[str, Any]] = []
-    for vendor_models in by_vendor.values():
-        curated.extend(_pick_for_vendor(vendor_models))
+    for vendor in vendors:
+        curated.extend(_pick_for_vendor(by_vendor[vendor]))
 
     # Pinned models always make the cut, rules or not.
     seen = {m["id"] for m in curated}
@@ -257,5 +309,6 @@ def describe_rules() -> Dict[str, Any]:
         "max_completion_price_per_m": MAX_COMPLETION_PRICE_PER_M,
         "min_context_length": MIN_CONTEXT_LENGTH,
         "max_models_per_vendor": MAX_MODELS_PER_VENDOR,
+        "vendors": VENDOR_ALLOWLIST or f"any (top {MAX_VENDORS})",
         "pinned": PINNED_MODELS,
     }
