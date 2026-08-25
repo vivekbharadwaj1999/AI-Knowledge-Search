@@ -1,3 +1,5 @@
+import json
+import logging
 import os
 from typing import Dict, Optional, List
 
@@ -36,6 +38,9 @@ APP_TITLE = os.getenv("APP_TITLE", "AI Knowledge Search")
 APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "http://localhost:5173")
 
 
+logger = logging.getLogger(__name__)
+
+
 class LLMError(RuntimeError):
     """An upstream model failure. The API layer maps this to a 502."""
 
@@ -62,6 +67,7 @@ class LLMClient:
         model: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        json_mode: bool = False,
     ) -> str:
         chosen_model = model or DEFAULT_MODEL
         max_tokens = max_tokens or DEFAULT_MAX_TOKENS
@@ -70,6 +76,22 @@ class LLMClient:
         )
 
         if self._fake:
+            if json_mode:
+                # Callers asking for JSON need parseable JSON, or offline mode
+                # breaks the very code paths it exists to exercise.
+                return json.dumps({
+                    "answer_critique_markdown":
+                        f"[USE_FAKE_LLM] Simulated critique from '{chosen_model}'.",
+                    "prompt_feedback_markdown": "[USE_FAKE_LLM] Simulated prompt feedback.",
+                    "improved_prompt": f"[USE_FAKE_LLM] {prompt[:60]}",
+                    "prompt_issue_tags": [],
+                    "scores": {
+                        "correctness": 0.8,
+                        "completeness": 0.7,
+                        "clarity": 0.9,
+                        "hallucination_risk": 0.1,
+                    },
+                })
             return (
                 f"[USE_FAKE_LLM] Simulated answer from '{chosen_model}'. "
                 f"Prompt was {len(prompt)} characters, temperature={temperature}, "
@@ -86,15 +108,33 @@ class LLMClient:
                 f"See GET /llm-models for the current list."
             )
 
+        kwargs = {
+            "model": chosen_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if json_mode:
+            # Structural guarantee where the model supports it, rather than
+            # hoping the prompt's "MUST be valid JSON" plea is obeyed.
+            kwargs["response_format"] = {"type": "json_object"}
+
         try:
-            resp = self.client.chat.completions.create(
-                model=chosen_model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
+            resp = self.client.chat.completions.create(**kwargs)
         except Exception as exc:
-            raise LLMError(f"Model '{chosen_model}' failed: {exc}") from exc
+            if not json_mode:
+                raise LLMError(f"Model '{chosen_model}' failed: {exc}") from exc
+            # Not every model accepts response_format. Retry once without it
+            # and fall back to parsing whatever prose comes back.
+            logger.info(
+                "Model %s rejected JSON mode (%s); retrying without it.",
+                chosen_model, exc,
+            )
+            kwargs.pop("response_format", None)
+            try:
+                resp = self.client.chat.completions.create(**kwargs)
+            except Exception as exc2:
+                raise LLMError(f"Model '{chosen_model}' failed: {exc2}") from exc2
 
         choices = getattr(resp, "choices", None) or []
         if not choices:

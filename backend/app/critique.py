@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from datetime import datetime
@@ -7,6 +8,8 @@ from pathlib import Path
 
 from app.config import LLMClient, DEFAULT_MODEL
 from app.auth import get_user_critique_log_path
+
+logger = logging.getLogger(__name__)
 
 PROMPT_ISSUE_TAGS = [
     "missing_context",
@@ -232,15 +235,39 @@ def run_critique(
         )
 
         prompt = _build_critique_prompt(current_question, answer, context)
-        raw = llm.complete(prompt, model=critic, temperature=temperature)
+        raw = llm.complete(
+            prompt, model=critic, temperature=temperature, json_mode=True
+        )
 
-        parsed = _safe_json_parse(raw) or {}
+        parsed = _safe_json_parse(raw)
+        critique_failed = parsed is None
+        if critique_failed:
+            # Previously this was `_safe_json_parse(raw) or {}`, which turned a
+            # parse failure into empty strings and rendered as a blank panel --
+            # indistinguishable from "the critic found nothing wrong".
+            preview = (raw or "").strip().replace("\n", " ")[:200]
+            logger.warning(
+                "Critique JSON parse failed. critic=%s answer_model=%s raw_start=%r",
+                critic, answer_model, preview,
+            )
+            parsed = {}
+
         answer_critique = _safe_str(parsed.get(
             "answer_critique_markdown") or parsed.get("answer_feedback_markdown"))
         prompt_feedback = _safe_str(parsed.get("prompt_feedback_markdown"))
         improved_prompt = _safe_str(parsed.get("improved_prompt"))
         tags = _safe_tags(parsed)
         scores = _safe_scores(parsed)
+
+        if critique_failed and not answer_critique:
+            answer_critique = (
+                f"**The critic model `{critic}` did not return valid JSON,** so no "
+                "structured critique could be produced.\n\n"
+                "The critique step requires strict JSON (scores plus feedback). "
+                "Smaller or reasoning-heavy models often wrap their output in prose "
+                "and fail this contract even when they answer questions well. "
+                "Try a stronger critic model."
+            )
 
         round_entry = {
             "round": round_idx,
