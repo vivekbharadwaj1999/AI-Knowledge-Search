@@ -174,7 +174,11 @@ def get_embedding_models(include_all: bool = False) -> Dict[str, Dict[str, any]]
     merged: Dict[str, Dict[str, any]] = dict(LOCAL_EMBEDDING_MODELS)
 
     try:
-        remote = get_embedding_catalog(include_all=include_all)
+        remote = get_embedding_catalog(
+            include_all=include_all,
+            # Don't offer to bill us for weights already sitting on disk.
+            exclude_basenames=list(LOCAL_EMBEDDING_MODELS.keys()),
+        )
     except Exception:
         # The local models are enough to keep the app usable.
         return merged
