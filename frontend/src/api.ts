@@ -140,7 +140,7 @@ export type AutoInsights = {
 export type EmbeddingModel = {
   id: string;
   label: string;
-  type: "local" | "openai" | "openrouter";
+  type: "local" | "openrouter";
   dimension: number;
   description: string;
 };

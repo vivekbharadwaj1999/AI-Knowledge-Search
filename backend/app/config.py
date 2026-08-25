@@ -27,9 +27,6 @@ if not OPENROUTER_API_KEY and not USE_FAKE_LLM:
         "https://openrouter.ai/keys), or set USE_FAKE_LLM=true to run offline."
     )
 
-# Used only for OpenAI-hosted *embedding* models; chat goes through OpenRouter.
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "openai/gpt-oss-20b")
 DEFAULT_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
 DEFAULT_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
@@ -158,22 +155,6 @@ LOCAL_EMBEDDING_MODELS: Dict[str, Dict[str, any]] = {
         "type": "local",
         "dimension": 768,
         "description": "Optimized for long documents, 8K context (local, free)"
-    },
-    # Legacy direct-to-OpenAI entries, kept so documents already indexed under
-    # these IDs still resolve. New indexing should use the openrouter/* variants
-    # served from the live catalog. Once nothing is indexed with these, delete
-    # them and OPENAI_API_KEY becomes unnecessary.
-    "text-embedding-3-small": {
-        "label": "OpenAI - text-embedding-3-small (direct)",
-        "type": "openai",
-        "dimension": 1536,
-        "description": "OpenAI's efficient model (API, paid)"
-    },
-    "text-embedding-3-large": {
-        "label": "OpenAI - text-embedding-3-large (direct)",
-        "type": "openai",
-        "dimension": 3072,
-        "description": "OpenAI's highest quality model (API, paid)"
     }
 }
 
@@ -235,16 +216,6 @@ class EmbeddingClient:
                 },
             )
             self.model = None
-        elif self.model_type == "openai":
-            # Legacy direct-to-OpenAI path, retained for already-indexed docs.
-            if not OPENAI_API_KEY:
-                raise RuntimeError(
-                    f"OpenAI API key required for model '{self.model_name}'. "
-                    "Set OPENAI_API_KEY in your .env file."
-                )
-            from openai import OpenAI
-            self.openai_client = OpenAI(api_key=OPENAI_API_KEY)
-            self.model = None
         else:
             if "Alibaba-NLP" in self.model_name or "gte-large" in self.model_name:
                 self.model = SentenceTransformer(self.model_name, trust_remote_code=True)
@@ -256,7 +227,7 @@ class EmbeddingClient:
         if not texts:
             return []
         
-        if self.model_type in ("openai", "openrouter"):
+        if self.model_type == "openrouter":
             return self._embed_api(texts)
         else:
             return self._embed_local(texts)
@@ -271,7 +242,7 @@ class EmbeddingClient:
         return embeddings.tolist()
     
     def _embed_api(self, texts: List[str]) -> List[List[float]]:
-        """OpenAI-compatible embeddings call — works against OpenAI or OpenRouter."""
+        """OpenAI-compatible embeddings call, routed through OpenRouter."""
         batch_size = 2048
         all_embeddings = []
 
