@@ -141,10 +141,10 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
                       ))}
                   </optgroup>
 
-                  {embeddingModels.some((m) => m.type === "openai") && (
-                    <optgroup label="OpenAI (Paid - Only use if absolutely necessary)">
+                  {embeddingModels.some((m) => m.type === "openrouter") && (
+                    <optgroup label="API Models (via OpenRouter)">
                       {embeddingModels
-                        .filter((m) => m.type === "openai")
+                        .filter((m) => m.type === "openrouter")
                         .map((model) => (
                           <option key={model.id} value={model.id}>
                             {getModelShortLabel(model)}
@@ -158,7 +158,11 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
             {selectedModelInfo && (
               <p className="mt-2 text-[11px] text-slate-400">
                 {selectedModelInfo.description}
-                {selectedModelInfo.type === "openai"}
+                {selectedModelInfo.type === "openrouter" && (
+                  <span className="text-amber-400">
+                    {" "}· sent to an external API and billed per token
+                  </span>
+                )}
               </p>
             )}
           </div>
