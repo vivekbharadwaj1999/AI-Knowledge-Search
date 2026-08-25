@@ -68,6 +68,20 @@ VENDOR_ALLOWLIST = (
 # contributing the most eligible models rather than all 48 of them.
 MAX_VENDORS = int(os.getenv("MODEL_MAX_VENDORS", "12"))
 
+# Substrings that disqualify a model ID. Defaults cover two classes of model
+# that pass every numeric filter but break a synchronous chat app:
+#   :batch  -- asynchronous batch endpoints; they never return a completion
+#              inline, so selecting one would hang the request
+#   safety/guard/moderation -- classifiers that emit verdicts, not answers
+MODEL_EXCLUDE_PATTERNS = [
+    p.strip().lower()
+    for p in os.getenv(
+        "MODEL_EXCLUDE_PATTERNS",
+        ":batch,-safety,-guard,guardrail,moderation",
+    ).split(",")
+    if p.strip()
+]
+
 # Models pinned here always survive curation, even if they breach the rules.
 # Comma-separated list of OpenRouter model IDs.
 PINNED_MODELS = [m.strip() for m in os.getenv("MODEL_ALLOWLIST", "").split(",") if m.strip()]
@@ -166,7 +180,14 @@ def _normalize(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def _is_eligible(model: Dict[str, Any]) -> bool:
     """Capability floor and price ceiling. Pinned models bypass this."""
+    model_id = model["id"].lower()
+    if any(pattern in model_id for pattern in MODEL_EXCLUDE_PATTERNS):
+        return False
     if "text" not in model["input_modalities"]:
+        return False
+    # Text out and nothing else. A model advertising ["text", "image"] is an
+    # image generator that happens to also emit text -- not what this app wants.
+    if [m for m in model["output_modalities"] if m != "text"]:
         return False
     if "text" not in model["output_modalities"]:
         return False
@@ -311,4 +332,5 @@ def describe_rules() -> Dict[str, Any]:
         "max_models_per_vendor": MAX_MODELS_PER_VENDOR,
         "vendors": VENDOR_ALLOWLIST or f"any (top {MAX_VENDORS})",
         "pinned": PINNED_MODELS,
+        "excluded_patterns": MODEL_EXCLUDE_PATTERNS,
     }
