@@ -72,6 +72,15 @@ MAX_VENDORS = int(os.getenv("MODEL_MAX_VENDORS", "12"))
 # chat models, so they get their own (much lower) ceiling.
 EMBEDDING_MAX_PRICE_PER_M = float(os.getenv("EMBEDDING_MAX_PRICE", "0.20"))
 
+# Embedding curation. The goal is a short list of models that differ from each
+# other, rather than five near-identical variants from one vendor.
+#   - models duplicating a locally-hosted one are dropped (paying per token for
+#     weights already on disk is pointless)
+#   - vendors are then taken round-robin, so the cap trims redundancy inside a
+#     vendor before it trims variety across vendors
+EMBEDDING_MAX_MODELS = int(os.getenv("EMBEDDING_MAX_MODELS", "14"))
+EMBEDDING_MAX_PER_VENDOR = int(os.getenv("EMBEDDING_MAX_PER_VENDOR", "2"))
+
 # Substrings that disqualify a model ID. Defaults cover two classes of model
 # that pass every numeric filter but break a synchronous chat app:
 #   :batch  -- asynchronous batch endpoints; they never return a completion
@@ -112,6 +121,15 @@ VENDOR_LABELS: Dict[str, str] = {
     "liquid": "Liquid AI",
     "ai21": "AI21 Labs",
     "inflection": "Inflection",
+    # Embedding-model publishers
+    "baai": "BAAI",
+    "voyageai": "Voyage AI",
+    "intfloat": "intfloat (E5)",
+    "thenlper": "thenlper (GTE)",
+    "sentence-transformers": "Sentence Transformers",
+    "jinaai": "Jina AI",
+    "hkunlp": "INSTRUCTOR",
+    "alibaba-nlp": "Alibaba (GTE)",
 }
 
 
@@ -296,24 +314,65 @@ def _is_embedding_eligible(model: Dict[str, Any]) -> bool:
     return True
 
 
-def get_embedding_catalog(*, include_all: bool = False) -> List[Dict[str, Any]]:
-    """
-    Embedding models from the same live catalog.
+def _basename(model_id: str) -> str:
+    """Last path segment, lowercased — 'sentence-transformers/all-MiniLM-L6-v2' -> 'all-minilm-l6-v2'."""
+    return model_id.split("/")[-1].split(":")[0].strip().lower()
 
-    No vendor cap here -- OpenRouter carries roughly a dozen embedding models
-    in total, so the price ceiling alone is enough curation.
+
+def get_embedding_catalog(
+    *,
+    include_all: bool = False,
+    exclude_basenames: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Embedding models from the live catalog, curated for variety.
+
+    ``exclude_basenames`` drops models already available locally — the caller
+    supplies them, since this module must not import config.
     """
     refresh()
     with _cache_lock:
         models = list(_cache["all"])
 
-    if include_all:
-        selected = [m for m in models if _is_embedding(m)]
-    else:
-        selected = [m for m in models if _is_embedding_eligible(m)]
+    embeddings = [m for m in models if _is_embedding(m)]
 
-    selected.sort(key=lambda m: (m["prompt_price_per_m"], m["vendor"].lower()))
-    return selected
+    if include_all:
+        embeddings.sort(key=lambda m: (m["prompt_price_per_m"], m["vendor"].lower()))
+        return embeddings
+
+    excluded = {_basename(b) for b in (exclude_basenames or [])}
+    eligible = [
+        m
+        for m in embeddings
+        if _is_embedding_eligible(m) and _basename(m["id"]) not in excluded
+    ]
+
+    # Strongest first within each vendor; price is the available proxy.
+    by_vendor: Dict[str, List[Dict[str, Any]]] = {}
+    for model in sorted(eligible, key=lambda m: (-m["prompt_price_per_m"], m["id"])):
+        by_vendor.setdefault(model["vendor"], []).append(model)
+
+    # Round-robin: every vendor contributes one before any contributes two.
+    vendors = sorted(by_vendor, key=lambda v: (-len(by_vendor[v]), v.lower()))
+    picked: List[Dict[str, Any]] = []
+    for rank in range(EMBEDDING_MAX_PER_VENDOR):
+        for vendor in vendors:
+            if len(picked) >= EMBEDDING_MAX_MODELS:
+                break
+            if rank < len(by_vendor[vendor]):
+                picked.append(by_vendor[vendor][rank])
+        if len(picked) >= EMBEDDING_MAX_MODELS:
+            break
+
+    # Pinned models always survive, whatever the caps did.
+    seen = {m["id"] for m in picked}
+    for model in embeddings:
+        if model["id"] in PINNED_MODELS and model["id"] not in seen:
+            picked.append(model)
+            seen.add(model["id"])
+
+    picked.sort(key=lambda m: (m["prompt_price_per_m"], m["vendor"].lower()))
+    return picked
 
 
 def refresh(force: bool = False) -> None:
