@@ -10,6 +10,7 @@ type ModelSelectProps = {
   loading?: boolean;
   error?: string | null;
   className?: string;
+  disabled?: boolean;
 };
 
 function priceTag(model: LLMModel): string {
@@ -31,6 +32,7 @@ export default function ModelSelect({
   loading = false,
   error = null,
   className,
+  disabled = false,
 }: ModelSelectProps) {
   const selectClass = className ?? BASE_CLASS;
 
@@ -61,6 +63,7 @@ export default function ModelSelect({
     <select
       className={selectClass}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     >
       {[...byVendor.entries()].map(([vendor, vendorModels]) => (

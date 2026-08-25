@@ -25,8 +25,8 @@ export default function UploadPanel({ onIndexed }: UploadPanelProps) {
     if (model.id === "intfloat/e5-base") return `E5 (efficient, free)`;
     if (model.id === "intfloat/multilingual-e5-base") return `E5-multilingual (70+ langs, free)`;
     if (model.id === "hkunlp/instructor-large") return `INSTRUCTOR (high quality, free)`;
-    if (model.id === "text-embedding-3-small") return `OpenAI Small (fast, paid)`;
-    if (model.id === "text-embedding-3-large") return `OpenAI Large (powerful, paid)`;
+    if (model.id === "openai/text-embedding-3-small") return `OpenAI Small (fast, paid)`;
+    if (model.id === "openai/text-embedding-3-large") return `OpenAI Large (powerful, paid)`;
 
     return baseLabel;
   };
