@@ -250,7 +250,7 @@ async def delete_account(authorization: Optional[str] = Header(None)):
 
 
 @app.get("/embedding-models")
-async def get_embedding_models():
+async def list_embedding_models():
     models = []
     for model_id, info in get_embedding_models().items():
         models.append({
