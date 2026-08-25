@@ -1,21 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { runBatchEvaluation } from "../api";
+import ModelSelect from "./ModelSelect";
+import { useLLMModels } from "../useLLMModels";
 
 interface BatchEvaluationPanelProps {
   documents: string[];
   onClose: () => void;
 }
 
-const MODEL_OPTIONS = [
-  { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (fast, lightweight)" },
-  { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (high quality general model)" },
-  { value: "llama-3.3-70b-specdec", label: "Llama 4 Scout 17B 16E (efficient, balanced)" },
-  { value: "mixtral-8x7b-32768", label: "Llama 4 Maverick 17B 128E (strong reasoning)" },
-  { value: "gemma2-9b-it", label: "GPT OSS 20B (reliable all round model)" },
-  { value: "llama-3.2-11b-vision-preview", label: "GPT OSS 120B (high capacity model)" },
-  { value: "llama-3.2-3b-preview", label: "Kimi K2 Instruct 0905 (large context)" },
-  { value: "llama-3.2-1b-preview", label: "Qwen3 32B (multilingual & strong general model)" },
-];
 
 export default function BatchEvaluationPanel({ documents, onClose }: BatchEvaluationPanelProps) {
   const [questions, setQuestions] = useState<string[]>([]);
@@ -31,12 +23,34 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
   const [enableAsk, setEnableAsk] = useState(false);
   const [enableCompare, setEnableCompare] = useState(false);
   const [enableCritique, setEnableCritique] = useState(false);
-  const [askModel, setAskModel] = useState("llama-3.1-8b-instant");
-  const [compareModelLeft, setCompareModelLeft] = useState("llama-3.1-8b-instant");
-  const [compareModelRight, setCompareModelRight] = useState("llama-3.3-70b-versatile");
-  const [critiqueAnswerModel, setCritiqueAnswerModel] = useState("llama-3.1-8b-instant");
-  const [critiqueCriticModel, setCritiqueCriticModel] = useState("llama-3.3-70b-versatile");
+  const [askModel, setAskModel] = useState("");
+  const [compareModelLeft, setCompareModelLeft] = useState("");
+  const [compareModelRight, setCompareModelRight] = useState("");
+  const [critiqueAnswerModel, setCritiqueAnswerModel] = useState("");
+  const [critiqueCriticModel, setCritiqueCriticModel] = useState("");
   const [critiqueSelfCorrect, setCritiqueSelfCorrect] = useState(false);
+
+  const {
+    models: llmModels,
+    defaultModel,
+    loading: llmModelsLoading,
+    error: llmModelsError,
+  } = useLLMModels();
+
+  // Same live catalog the rest of the app uses. This panel previously carried
+  // its own hardcoded copy whose labels had drifted out of sync with its values.
+  useEffect(() => {
+    if (llmModels.length === 0) return;
+    const known = (id: string) => Boolean(id) && llmModels.some((m) => m.id === id);
+    const primary = known(defaultModel) ? defaultModel : llmModels[0].id;
+    const secondary = llmModels.find((m) => m.id !== primary)?.id ?? primary;
+
+    setAskModel((cur) => (known(cur) ? cur : primary));
+    setCompareModelLeft((cur) => (known(cur) ? cur : primary));
+    setCompareModelRight((cur) => (known(cur) ? cur : secondary));
+    setCritiqueAnswerModel((cur) => (known(cur) ? cur : primary));
+    setCritiqueCriticModel((cur) => (known(cur) ? cur : secondary));
+  }, [llmModels, defaultModel]);
 
   const MAX_QUESTIONS = 20;
 
@@ -226,16 +240,15 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                   <span className="font-semibold">Ask:</span>
                 </label>
 
-                <select
+                <ModelSelect
+                  models={llmModels}
+                  loading={llmModelsLoading}
+                  error={llmModelsError}
                   value={askModel}
-                  onChange={(e) => setAskModel(e.target.value)}
+                  onChange={setAskModel}
                   disabled={!enableAsk}
                   className="flex-1 bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {MODEL_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
@@ -250,27 +263,25 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 </label>
 
                 <div className="flex-1 grid grid-cols-2 gap-2">
-                  <select
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={compareModelLeft}
-                    onChange={(e) => setCompareModelLeft(e.target.value)}
+                    onChange={setCompareModelLeft}
                     disabled={!enableCompare}
                     className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {MODEL_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                  />
 
-                  <select
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={compareModelRight}
-                    onChange={(e) => setCompareModelRight(e.target.value)}
+                    onChange={setCompareModelRight}
                     disabled={!enableCompare}
                     className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {MODEL_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
 
@@ -286,27 +297,25 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
                 </label>
 
                 <div className="flex-1 grid grid-cols-2 gap-2">
-                  <select
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={critiqueAnswerModel}
-                    onChange={(e) => setCritiqueAnswerModel(e.target.value)}
+                    onChange={setCritiqueAnswerModel}
                     disabled={!enableCritique}
                     className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {MODEL_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                  />
 
-                  <select
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={critiqueCriticModel}
-                    onChange={(e) => setCritiqueCriticModel(e.target.value)}
+                    onChange={setCritiqueCriticModel}
                     disabled={!enableCritique}
                     className="bg-slate-800 text-slate-100 px-2 py-1 rounded text-xs border border-slate-700 focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {MODEL_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer hover:text-slate-300">
