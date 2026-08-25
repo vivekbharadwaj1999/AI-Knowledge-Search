@@ -1,0 +1,261 @@
+"""
+Live LLM catalog backed by OpenRouter.
+
+This module replaces the old hardcoded model dict. Instead of
+a hand-maintained list of model IDs (which silently rots every time a provider
+retires a model), the catalog is fetched from OpenRouter's public ``/models``
+endpoint and filtered down to an affordable, capable subset.
+
+Curation happens server-side so the browser never receives the full ~300-model
+catalog. Every rule below is overridable from ``.env`` -- the point is that the
+app stores *selection rules*, never model names.
+"""
+
+from __future__ import annotations
+
+import os
+import threading
+import time
+from typing import Any, Dict, List, Optional
+
+import httpx
+
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+# --- Curation rules -------------------------------------------------------
+# Price ceilings are the budget guard: OpenRouter carries models at $15+ per
+# million tokens, and this is a public demo. Anything above these limits is
+# never offered and never accepted.
+MAX_PROMPT_PRICE_PER_M = float(os.getenv("MODEL_MAX_PROMPT_PRICE", "1.00"))
+MAX_COMPLETION_PRICE_PER_M = float(os.getenv("MODEL_MAX_COMPLETION_PRICE", "3.00"))
+MIN_CONTEXT_LENGTH = int(os.getenv("MODEL_MIN_CONTEXT", "32000"))
+MAX_MODELS_PER_VENDOR = int(os.getenv("MODEL_MAX_PER_VENDOR", "3"))
+CATALOG_TTL_SECONDS = int(os.getenv("MODEL_CATALOG_TTL", "3600"))
+REQUEST_TIMEOUT_SECONDS = float(os.getenv("MODEL_CATALOG_TIMEOUT", "15"))
+
+# Models pinned here always survive curation, even if they breach the rules.
+# Comma-separated list of OpenRouter model IDs.
+PINNED_MODELS = [m.strip() for m in os.getenv("MODEL_ALLOWLIST", "").split(",") if m.strip()]
+
+# Cosmetic only -- an unknown vendor key is title-cased rather than dropped, so
+# a new provider appearing in the catalog still renders sensibly.
+VENDOR_LABELS: Dict[str, str] = {
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "google": "Google",
+    "meta-llama": "Meta",
+    "mistralai": "Mistral",
+    "moonshotai": "Moonshot (Kimi)",
+    "deepseek": "DeepSeek",
+    "qwen": "Qwen (Alibaba)",
+    "x-ai": "xAI",
+    "microsoft": "Microsoft",
+    "nvidia": "NVIDIA",
+    "amazon": "Amazon",
+    "cohere": "Cohere",
+    "nousresearch": "Nous Research",
+    "perplexity": "Perplexity",
+    "liquid": "Liquid AI",
+    "ai21": "AI21 Labs",
+    "inflection": "Inflection",
+}
+
+
+class CatalogError(RuntimeError):
+    """Raised when the model catalog cannot be loaded and no cached copy exists."""
+
+
+_cache_lock = threading.Lock()
+_cache: Dict[str, Any] = {"fetched_at": 0.0, "all": [], "curated": []}
+
+
+def _price_per_million(raw: Optional[str]) -> Optional[float]:
+    """OpenRouter quotes prices per token as strings; convert to $ per 1M tokens."""
+    if raw is None:
+        return None
+    try:
+        return float(raw) * 1_000_000
+    except (TypeError, ValueError):
+        return None
+
+
+def _fetch_raw() -> List[Dict[str, Any]]:
+    """Fetch the raw catalog. This endpoint is public and needs no API key."""
+    url = f"{OPENROUTER_BASE_URL.rstrip('/')}/models"
+    with httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        payload = response.json()
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise CatalogError("Unexpected response shape from OpenRouter /models")
+    return data
+
+
+def _normalize(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Reduce an OpenRouter catalog entry to the fields the app cares about."""
+    model_id = entry.get("id")
+    if not model_id:
+        return None
+
+    pricing = entry.get("pricing") or {}
+    prompt_price = _price_per_million(pricing.get("prompt"))
+    completion_price = _price_per_million(pricing.get("completion"))
+    if prompt_price is None or completion_price is None:
+        return None
+
+    architecture = entry.get("architecture") or {}
+    input_modalities = architecture.get("input_modalities") or ["text"]
+    output_modalities = architecture.get("output_modalities") or ["text"]
+
+    vendor_key = model_id.split("/")[0] if "/" in model_id else "other"
+
+    return {
+        "id": model_id,
+        "label": entry.get("name") or model_id,
+        "vendor": VENDOR_LABELS.get(vendor_key, vendor_key.replace("-", " ").title()),
+        "vendor_key": vendor_key,
+        "context_length": int(entry.get("context_length") or 0),
+        "prompt_price_per_m": round(prompt_price, 4),
+        "completion_price_per_m": round(completion_price, 4),
+        "is_free": prompt_price == 0 and completion_price == 0,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
+        "description": (entry.get("description") or "").strip()[:300],
+    }
+
+
+def _is_eligible(model: Dict[str, Any]) -> bool:
+    """Capability floor and price ceiling. Pinned models bypass this."""
+    if "text" not in model["input_modalities"]:
+        return False
+    if "text" not in model["output_modalities"]:
+        return False
+    if model["context_length"] < MIN_CONTEXT_LENGTH:
+        return False
+    if model["prompt_price_per_m"] > MAX_PROMPT_PRICE_PER_M:
+        return False
+    if model["completion_price_per_m"] > MAX_COMPLETION_PRICE_PER_M:
+        return False
+    return True
+
+
+def _pick_for_vendor(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Given one vendor's eligible models sorted most-expensive-first, keep the
+    strongest few plus the cheapest. Price is a rough capability proxy, and
+    since everything here is already under the ceiling, the expensive end is
+    still cheap. Always keeping the cheapest guarantees a free or near-free
+    option per vendor stays reachable.
+    """
+    if len(models) <= MAX_MODELS_PER_VENDOR:
+        return models
+
+    picked = models[: max(MAX_MODELS_PER_VENDOR - 1, 1)]
+    cheapest = models[-1]
+    if cheapest["id"] not in {m["id"] for m in picked}:
+        picked = picked + [cheapest]
+    return picked
+
+
+def _curate(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Turn the full catalog into a short, vendor-diverse dropdown list."""
+    eligible = [m for m in models if _is_eligible(m)]
+
+    by_vendor: Dict[str, List[Dict[str, Any]]] = {}
+    for model in sorted(
+        eligible,
+        key=lambda m: (-m["prompt_price_per_m"], -m["context_length"]),
+    ):
+        by_vendor.setdefault(model["vendor_key"], []).append(model)
+
+    curated: List[Dict[str, Any]] = []
+    for vendor_models in by_vendor.values():
+        curated.extend(_pick_for_vendor(vendor_models))
+
+    # Pinned models always make the cut, rules or not.
+    seen = {m["id"] for m in curated}
+    for model in models:
+        if model["id"] in PINNED_MODELS and model["id"] not in seen:
+            curated.append(model)
+            seen.add(model["id"])
+
+    curated.sort(key=lambda m: (m["vendor"].lower(), m["prompt_price_per_m"]))
+    return curated
+
+
+def refresh(force: bool = False) -> None:
+    """Refresh the cached catalog if it is missing or stale."""
+    with _cache_lock:
+        age = time.time() - _cache["fetched_at"]
+        if not force and _cache["all"] and age <= CATALOG_TTL_SECONDS:
+            return
+
+        try:
+            raw = _fetch_raw()
+        except Exception as exc:
+            # A stale catalog beats a dead app: only fail if we have nothing.
+            if _cache["all"]:
+                return
+            raise CatalogError(
+                f"Could not load the model catalog from OpenRouter: {exc}"
+            ) from exc
+
+        normalized = [n for n in (_normalize(e) for e in raw) if n]
+        if not normalized:
+            if _cache["all"]:
+                return
+            raise CatalogError("OpenRouter returned an empty model catalog")
+
+        _cache["all"] = normalized
+        _cache["curated"] = _curate(normalized)
+        _cache["fetched_at"] = time.time()
+
+
+def get_catalog(*, include_all: bool = False, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    """
+    Return the curated model list, or the entire catalog when ``include_all``.
+
+    ``include_all`` is an inspection escape hatch (``GET /llm-models?all=true``);
+    it is not what the dropdown renders.
+    """
+    refresh(force=force_refresh)
+    with _cache_lock:
+        return list(_cache["all"] if include_all else _cache["curated"])
+
+
+def find_model(model_id: str) -> Optional[Dict[str, Any]]:
+    for model in get_catalog(include_all=True):
+        if model["id"] == model_id:
+            return model
+    return None
+
+
+def is_allowed(model_id: str) -> bool:
+    """
+    A model is usable if it exists and either passes the rules or is pinned.
+
+    Deliberately broader than the curated dropdown: anything genuinely
+    affordable can be driven through the API for experimentation, while models
+    above the price ceiling are refused outright.
+    """
+    if model_id in PINNED_MODELS:
+        return True
+    model = find_model(model_id)
+    return bool(model and _is_eligible(model))
+
+
+def get_model_label(model_id: str) -> str:
+    model = find_model(model_id)
+    return model["label"] if model else model_id
+
+
+def describe_rules() -> Dict[str, Any]:
+    """Surface the active curation rules so the UI can explain the filtering."""
+    return {
+        "max_prompt_price_per_m": MAX_PROMPT_PRICE_PER_M,
+        "max_completion_price_per_m": MAX_COMPLETION_PRICE_PER_M,
+        "min_context_length": MIN_CONTEXT_LENGTH,
+        "max_models_per_vendor": MAX_MODELS_PER_VENDOR,
+        "pinned": PINNED_MODELS,
+    }

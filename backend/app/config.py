@@ -2,40 +2,60 @@ import os
 from typing import Dict, Optional, List
 
 from dotenv import load_dotenv
-from groq import Groq
+from openai import OpenAI
 from sentence_transformers import SentenceTransformer
+
+from app.models_catalog import (
+    OPENROUTER_BASE_URL,
+    get_catalog,
+    get_model_label,
+    is_allowed,
+)
 
 load_dotenv()
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-if not GROQ_API_KEY:
+# Offline mode: returns canned completions so the whole app can be exercised
+# without spending credits. Set USE_FAKE_LLM=true in .env.
+USE_FAKE_LLM = os.getenv("USE_FAKE_LLM", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+if not OPENROUTER_API_KEY and not USE_FAKE_LLM:
     raise RuntimeError(
-        "GROQ_API_KEY environment variable is not set. "
-        "Create a .env file with GROQ_API_KEY=... or export it before starting the backend."
+        "OPENROUTER_API_KEY environment variable is not set. "
+        "Create a .env file with OPENROUTER_API_KEY=... (get one at "
+        "https://openrouter.ai/keys), or set USE_FAKE_LLM=true to run offline."
     )
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
+# Used only for OpenAI-hosted *embedding* models; chat goes through OpenRouter.
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "openai/gpt-oss-20b")
 DEFAULT_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
 DEFAULT_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
 
-GROQ_AVAILABLE_MODELS: Dict[str, str] = {
-    "llama-3.1-8b-instant": "Llama 3.1 8B Instant - fast, lightweight",
-    "llama-3.3-70b-versatile": "Llama 3.3 70B Versatile - high-quality general model",
-    "meta-llama/llama-4-scout-17b-16e-instruct": "Llama 4 Scout 17B 16E - efficient, balanced",
-    "meta-llama/llama-4-maverick-17b-128e-instruct": "Llama 4 Maverick 17B 128E - strong reasoning",
-    "openai/gpt-oss-20b": "GPT OSS 20B - reliable all-round model",
-    "openai/gpt-oss-120b": "GPT OSS 120B - high-capacity model",
-    "meta-llama/llama-guard-4-12b": "Llama Guard 4 12B - safety model",
-    "openai/gpt-oss-safeguard-20b": "GPT OSS Safeguard 20B - safety model",
-    "moonshotai/kimi-k2-instruct-0905": "Kimi K2 Instruct 0905 - very large 256k context",
-    "qwen/qwen3-32b": "Qwen3 32B - multilingual & strong general model",
-}
+# OpenRouter attributes traffic using these; they show up on your dashboard.
+APP_TITLE = os.getenv("APP_TITLE", "AI Knowledge Search")
+APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "http://localhost:5173")
+
+
+class LLMError(RuntimeError):
+    """An upstream model failure. The API layer maps this to a 502."""
+
 
 class LLMClient:
     def __init__(self, api_key: Optional[str] = None) -> None:
-        self.client = Groq(api_key=api_key or GROQ_API_KEY)
+        self._fake = USE_FAKE_LLM
+        if self._fake:
+            self.client = None
+        else:
+            self.client = OpenAI(
+                api_key=api_key or OPENROUTER_API_KEY,
+                base_url=OPENROUTER_BASE_URL,
+                default_headers={
+                    "HTTP-Referer": APP_PUBLIC_URL,
+                    "X-Title": APP_TITLE,
+                },
+            )
 
     def complete(
         self,
@@ -45,26 +65,49 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> str:
-        chosen_model = model or GROQ_MODEL
-        if chosen_model not in GROQ_AVAILABLE_MODELS:
-            chosen_model = GROQ_MODEL
-
+        chosen_model = model or DEFAULT_MODEL
         max_tokens = max_tokens or DEFAULT_MAX_TOKENS
         temperature = (
             DEFAULT_TEMPERATURE if temperature is None else float(temperature)
         )
 
-        resp = self.client.chat.completions.create(
-            model=chosen_model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        if self._fake:
+            return (
+                f"[USE_FAKE_LLM] Simulated answer from '{chosen_model}'. "
+                f"Prompt was {len(prompt)} characters, temperature={temperature}, "
+                f"max_tokens={max_tokens}."
+            )
 
-        return resp.choices[0].message.content
+        # No silent fallback. The previous version quietly swapped an unknown
+        # model for the default, which turned a stale model list into an
+        # app-wide outage the moment that default was retired.
+        if not is_allowed(chosen_model):
+            raise LLMError(
+                f"Model '{chosen_model}' is not available. It may have been retired by "
+                f"its provider, or it exceeds this deployment's price limits. "
+                f"See GET /llm-models for the current list."
+            )
 
-def get_model_label(model_id: str) -> str:
-    return GROQ_AVAILABLE_MODELS.get(model_id, model_id)
+        try:
+            resp = self.client.chat.completions.create(
+                model=chosen_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except Exception as exc:
+            raise LLMError(f"Model '{chosen_model}' failed: {exc}") from exc
+
+        choices = getattr(resp, "choices", None) or []
+        if not choices:
+            raise LLMError(f"Model '{chosen_model}' returned no choices.")
+
+        return choices[0].message.content or ""
+
+
+def get_available_models(include_all: bool = False) -> List[Dict]:
+    """Curated LLM list, fetched live from OpenRouter. See app/models_catalog.py."""
+    return get_catalog(include_all=include_all)
 
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 

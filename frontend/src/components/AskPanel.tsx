@@ -2,7 +2,8 @@ import type {
   KeyboardEvent,
   RefObject,
 } from "react";
-import type { AutoInsights, SourceChunk } from "../api";
+import type { AutoInsights, SourceChunk, LLMModel } from "../api";
+import ModelSelect from "./ModelSelect";
 
 export type HighlightMode = "ai" | "keywords" | "sentences" | "off";
 
@@ -35,48 +36,6 @@ export type Comparison = {
   };
 };
 
-export const MODEL_OPTIONS = [
-  {
-    id: "llama-3.1-8b-instant",
-    label: "Llama 3.1 8B Instant (fast, lightweight)",
-  },
-  {
-    id: "llama-3.3-70b-versatile",
-    label: "Llama 3.3 70B Versatile (high quality general model)",
-  },
-  {
-    id: "meta-llama/llama-4-scout-17b-16e-instruct",
-    label: "Llama 4 Scout 17B 16E (efficient, balanced)",
-  },
-  {
-    id: "meta-llama/llama-4-maverick-17b-128e-instruct",
-    label: "Llama 4 Maverick 17B 128E (strong reasoning)",
-  },
-  {
-    id: "openai/gpt-oss-20b",
-    label: "GPT OSS 20B (reliable all round model)",
-  },
-  {
-    id: "openai/gpt-oss-120b",
-    label: "GPT OSS 120B (high capacity model)",
-  },
-  {
-    id: "meta-llama/llama-guard-4-12b",
-    label: "Llama Guard 4 12B (safety check model against disallowed content)",
-  },
-  {
-    id: "openai/gpt-oss-safeguard-20b",
-    label: "GPT OSS Safeguard 20B (safety check model against disallowed content)",
-  },
-  {
-    id: "moonshotai/kimi-k2-instruct-0905",
-    label: "Kimi K2 Instruct 0905 (large context)",
-  },
-  {
-    id: "qwen/qwen3-32b",
-    label: "Qwen3 32B (multilingual & strong general model)",
-  },
-] as const;
 
 type SimilarityMetric = "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
 
@@ -95,6 +54,9 @@ export type AskControlsProps = {
   topK: number;
   modelId: string;
   setModelId: (id: string) => void;
+  models: LLMModel[];
+  modelsLoading?: boolean;
+  modelsError?: string | null;
   canAsk: boolean;
   isLoading: boolean;
   onAsk: () => void;
@@ -119,6 +81,9 @@ export default function AskControls(props: AskControlsProps) {
     topK,
     modelId,
     setModelId,
+    models,
+    modelsLoading,
+    modelsError,
     canAsk,
     isLoading,
     onAsk,
@@ -146,18 +111,15 @@ export default function AskControls(props: AskControlsProps) {
         <div className="mt-1 pt-3 flex flex-wrap items-center gap-3">
           <label className="flex flex-col items-start gap-1 sm:flex-row sm:items-center">
             <span>Choose model:</span>
-            <select
+            <ModelSelect
               className="w-full sm:w-auto max-w-full bg-slate-800 border border-slate-700 rounded
                        px-2 py-1 text-[11px] sm:text-xs text-slate-100"
+              models={models}
+              loading={modelsLoading}
+              error={modelsError}
               value={modelId}
-              onChange={(e) => setModelId(e.target.value)}
-            >
-              {MODEL_OPTIONS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+              onChange={setModelId}
+            />
           </label>
         </div>
       </div>

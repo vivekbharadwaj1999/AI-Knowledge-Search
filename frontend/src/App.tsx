@@ -1,6 +1,8 @@
 import { useEffect, useRef, useLayoutEffect, useState, type KeyboardEvent } from "react";
 import UploadPanel from "./components/UploadPanel";
-import AskControls, { MODEL_OPTIONS } from "./components/AskPanel";
+import AskControls from "./components/AskPanel";
+import ModelSelect from "./components/ModelSelect";
+import { useLLMModels } from "./useLLMModels";
 import ReportPanel from "./components/ReportPanel";
 import ReactMarkdown from "react-markdown";
 import logo from "./assets/logo.webp";
@@ -777,17 +779,41 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [topK, setTopK] = useState(5);
-  const [modelId, setModelId] = useState<string>("llama-3.1-8b-instant");
+  const [modelId, setModelId] = useState<string>("");
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("ai");
   const [showContextFor, setShowContextFor] = useState<number | null>(null);
   const [compareQuestion, setCompareQuestion] = useState("");
-  const [modelLeft, setModelLeft] = useState("llama-3.1-8b-instant");
-  const [modelRight, setModelRight] = useState("llama-3.3-70b-versatile");
+  const [modelLeft, setModelLeft] = useState("");
+  const [modelRight, setModelRight] = useState("");
   const [comparisons, setComparisons] = useState<Comparison[]>([]);
   const [isCompareLoading, setIsCompareLoading] = useState(false);
   const [critiqueQuestion, setCritiqueQuestion] = useState("");
-  const [answerModelId, setAnswerModelId] = useState("llama-3.1-8b-instant");
-  const [criticModelId, setCriticModelId] = useState("llama-3.3-70b-versatile");
+  const [answerModelId, setAnswerModelId] = useState("");
+  const [criticModelId, setCriticModelId] = useState("");
+
+  const {
+    models: llmModels,
+    defaultModel,
+    loading: llmModelsLoading,
+    error: llmModelsError,
+  } = useLLMModels();
+
+  // Seed each picker once the catalog arrives, and re-seed if the current
+  // choice has disappeared from the provider's catalog. No model ID is
+  // hardcoded anywhere: a retired model just stops being offered.
+  useEffect(() => {
+    if (llmModels.length === 0) return;
+
+    const known = (id: string) => Boolean(id) && llmModels.some((m) => m.id === id);
+    const primary = known(defaultModel) ? defaultModel : llmModels[0].id;
+    const secondary = llmModels.find((m) => m.id !== primary)?.id ?? primary;
+
+    setModelId((cur) => (known(cur) ? cur : primary));
+    setModelLeft((cur) => (known(cur) ? cur : primary));
+    setModelRight((cur) => (known(cur) ? cur : secondary));
+    setAnswerModelId((cur) => (known(cur) ? cur : primary));
+    setCriticModelId((cur) => (known(cur) ? cur : secondary));
+  }, [llmModels, defaultModel]);
   const [critiques, setCritiques] = useState<CritiqueRun[]>([]);
   const [isCritiqueLoading, setIsCritiqueLoading] = useState(false);
   const [relationsLoading, setRelationsLoading] = useState(false);
@@ -1603,6 +1629,9 @@ function App() {
               topK={topK}
               modelId={modelId}
               setModelId={setModelId}
+              models={llmModels}
+              modelsLoading={llmModelsLoading}
+              modelsError={llmModelsError}
               canAsk={canAsk}
               isLoading={isLoading}
               onAsk={handleAsk}
@@ -1657,34 +1686,26 @@ function App() {
                   <label className="block text-[11px] text-slate-400 mb-0.5">
                     Model A
                   </label>
-                  <select
-                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={modelLeft}
-                    onChange={(e) => setModelLeft(e.target.value)}
-                  >
-                    {MODEL_OPTIONS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setModelLeft}
+                  />
                 </div>
 
                 <div className="flex-1">
                   <label className="block text-[11px] text-slate-400 mb-0.5">
                     Model B
                   </label>
-                  <select
-                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={modelRight}
-                    onChange={(e) => setModelRight(e.target.value)}
-                  >
-                    {MODEL_OPTIONS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setModelRight}
+                  />
                 </div>
               </div>
 
@@ -1736,34 +1757,26 @@ function App() {
                   <label className="block text-[11px] text-slate-400 mb-0.5">
                     Answer model
                   </label>
-                  <select
-                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={answerModelId}
-                    onChange={(e) => setAnswerModelId(e.target.value)}
-                  >
-                    {MODEL_OPTIONS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setAnswerModelId}
+                  />
                 </div>
 
                 <div className="flex-1">
                   <label className="block text-[11px] text-slate-400 mb-0.5">
                     Critic model
                   </label>
-                  <select
-                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+                  <ModelSelect
+                    models={llmModels}
+                    loading={llmModelsLoading}
+                    error={llmModelsError}
                     value={criticModelId}
-                    onChange={(e) => setCriticModelId(e.target.value)}
-                  >
-                    {MODEL_OPTIONS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setCriticModelId}
+                  />
                 </div>
               </div>
               <div className="mt-4 pt-4 border-slate-800 space-y-2">
