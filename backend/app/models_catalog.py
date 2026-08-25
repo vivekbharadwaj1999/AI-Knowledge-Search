@@ -133,11 +133,11 @@ def _price_per_million(raw: Optional[str]) -> Optional[float]:
         return None
 
 
-def _fetch_raw() -> List[Dict[str, Any]]:
-    """Fetch the raw catalog. This endpoint is public and needs no API key."""
+def _fetch_raw(params: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+    """Fetch a catalog listing. This endpoint is public and needs no API key."""
     url = f"{OPENROUTER_BASE_URL.rstrip('/')}/models"
     with httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        response = client.get(url)
+        response = client.get(url, params=params or {})
         response.raise_for_status()
         payload = response.json()
     data = payload.get("data")
@@ -146,7 +146,20 @@ def _fetch_raw() -> List[Dict[str, Any]]:
     return data
 
 
-def _normalize(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _fetch_embeddings_raw() -> List[Dict[str, Any]]:
+    """
+    Embedding models come from a separate listing.
+
+    The default /models response covers text/image/audio generation only --
+    it carries no embedding entries at all, and nothing in an entry's
+    architecture block marks one. The query parameter is the only reliable
+    way to identify them, so we let the endpoint do the classifying rather
+    than inspecting fields ourselves.
+    """
+    return _fetch_raw({"output_modalities": "embeddings"})
+
+
+def _normalize(entry: Dict[str, Any], *, is_embedding: bool = False) -> Optional[Dict[str, Any]]:
     """Reduce an OpenRouter catalog entry to the fields the app cares about."""
     model_id = entry.get("id")
     if not model_id:
@@ -181,12 +194,16 @@ def _normalize(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "is_free": prompt_price == 0 and completion_price == 0,
         "input_modalities": input_modalities,
         "output_modalities": output_modalities,
+        # Set from which listing the entry came, not from its own metadata.
+        "is_embedding": is_embedding,
         "description": (entry.get("description") or "").strip()[:300],
     }
 
 
 def _is_eligible(model: Dict[str, Any]) -> bool:
     """Capability floor and price ceiling. Pinned models bypass this."""
+    if model.get("is_embedding"):
+        return False
     model_id = model["id"].lower()
     if any(pattern in model_id for pattern in MODEL_EXCLUDE_PATTERNS):
         return False
@@ -265,10 +282,7 @@ def _curate(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _is_embedding(model: Dict[str, Any]) -> bool:
-    return any(
-        out in ("embedding", "embeddings")
-        for out in model["output_modalities"]
-    )
+    return bool(model.get("is_embedding"))
 
 
 def _is_embedding_eligible(model: Dict[str, Any]) -> bool:
@@ -311,6 +325,7 @@ def refresh(force: bool = False) -> None:
 
         try:
             raw = _fetch_raw()
+            raw_embeddings = _fetch_embeddings_raw()
         except Exception as exc:
             # A stale catalog beats a dead app: only fail if we have nothing.
             if _cache["all"]:
@@ -320,6 +335,11 @@ def refresh(force: bool = False) -> None:
             ) from exc
 
         normalized = [n for n in (_normalize(e) for e in raw) if n]
+        normalized += [
+            n
+            for n in (_normalize(e, is_embedding=True) for e in raw_embeddings)
+            if n
+        ]
         if not normalized:
             if _cache["all"]:
                 return
