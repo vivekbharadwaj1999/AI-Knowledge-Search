@@ -36,8 +36,8 @@ from app.vector_store import list_documents, clear_vector_store
 from app.config import (
     DEFAULT_MODEL,
     LLMError,
-    AVAILABLE_EMBEDDING_MODELS,
     get_embedding_dimension,
+    get_embedding_models,
     get_available_models,
 )
 from app.models_catalog import CatalogError, describe_rules
@@ -252,12 +252,14 @@ async def delete_account(authorization: Optional[str] = Header(None)):
 @app.get("/embedding-models")
 async def get_embedding_models():
     models = []
-    for model_id, info in AVAILABLE_EMBEDDING_MODELS.items():
+    for model_id, info in get_embedding_models().items():
         models.append({
             "id": model_id,
             "label": info["label"],
             "type": info["type"],
-            "dimension": info["dimension"],
+            # 0 means "not yet known" — OpenRouter does not publish embedding
+            # dimensions, so it is filled in after the model is first used.
+            "dimension": info.get("dimension", 0),
             "description": info["description"]
         })
     return {"models": models}
@@ -305,10 +307,10 @@ async def ingest_document(
             detail="Unsupported file type. Allowed: PDF, TXT, CSV, DOCX, PPTX, XLSX.",
         )
 
-    if embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+    if embedding_model not in get_embedding_models():
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid embedding model. Choose from: {', '.join(AVAILABLE_EMBEDDING_MODELS.keys())}"
+            detail=f"Invalid embedding model. Choose from: {', '.join(get_embedding_models().keys())}"
         )
 
     user_upload_dir = get_user_upload_dir(username, is_guest)
@@ -359,7 +361,7 @@ async def ask_question_route(payload: AskRequest, authorization: Optional[str] =
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     embedding_model = getattr(payload, 'embedding_model', None)
-    if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+    if embedding_model and embedding_model not in get_embedding_models():
         raise HTTPException(
             status_code=400,
             detail=f"Invalid embedding model: {embedding_model}"
@@ -411,7 +413,7 @@ async def compare_route(payload: CompareRequest, authorization: Optional[str] = 
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     embedding_model = getattr(payload, 'embedding_model', None)
-    if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+    if embedding_model and embedding_model not in get_embedding_models():
         raise HTTPException(
             status_code=400,
             detail=f"Invalid embedding model: {embedding_model}"
@@ -704,7 +706,7 @@ async def analyze_operation(payload: dict, authorization: Optional[str] = Header
             detail=f"Invalid operation. Must be 'ask', 'compare', or 'critique'"
         )
 
-    if embedding_model and embedding_model not in AVAILABLE_EMBEDDING_MODELS:
+    if embedding_model and embedding_model not in get_embedding_models():
         raise HTTPException(
             status_code=400,
             detail=f"Invalid embedding model: {embedding_model}"

@@ -68,6 +68,10 @@ VENDOR_ALLOWLIST = (
 # contributing the most eligible models rather than all 48 of them.
 MAX_VENDORS = int(os.getenv("MODEL_MAX_VENDORS", "12"))
 
+# Embedding models are priced per input token only and are far cheaper than
+# chat models, so they get their own (much lower) ceiling.
+EMBEDDING_MAX_PRICE_PER_M = float(os.getenv("EMBEDDING_MAX_PRICE", "0.20"))
+
 # Substrings that disqualify a model ID. Defaults cover two classes of model
 # that pass every numeric filter but break a synchronous chat app:
 #   :batch  -- asynchronous batch endpoints; they never return a completion
@@ -150,9 +154,12 @@ def _normalize(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     pricing = entry.get("pricing") or {}
     prompt_price = _price_per_million(pricing.get("prompt"))
-    completion_price = _price_per_million(pricing.get("completion"))
-    if prompt_price is None or completion_price is None:
+    if prompt_price is None:
         return None
+    # Embedding models bill on input only and may omit a completion price
+    # entirely; treating that as free keeps them in the catalog instead of
+    # silently dropping every one of them.
+    completion_price = _price_per_million(pricing.get("completion")) or 0.0
 
     architecture = entry.get("architecture") or {}
     input_modalities = architecture.get("input_modalities") or ["text"]
@@ -257,6 +264,44 @@ def _curate(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return curated
 
 
+def _is_embedding(model: Dict[str, Any]) -> bool:
+    return any(
+        out in ("embedding", "embeddings")
+        for out in model["output_modalities"]
+    )
+
+
+def _is_embedding_eligible(model: Dict[str, Any]) -> bool:
+    if not _is_embedding(model):
+        return False
+    model_id = model["id"].lower()
+    if any(pattern in model_id for pattern in MODEL_EXCLUDE_PATTERNS):
+        return False
+    if model["prompt_price_per_m"] > EMBEDDING_MAX_PRICE_PER_M:
+        return False
+    return True
+
+
+def get_embedding_catalog(*, include_all: bool = False) -> List[Dict[str, Any]]:
+    """
+    Embedding models from the same live catalog.
+
+    No vendor cap here -- OpenRouter carries roughly a dozen embedding models
+    in total, so the price ceiling alone is enough curation.
+    """
+    refresh()
+    with _cache_lock:
+        models = list(_cache["all"])
+
+    if include_all:
+        selected = [m for m in models if _is_embedding(m)]
+    else:
+        selected = [m for m in models if _is_embedding_eligible(m)]
+
+    selected.sort(key=lambda m: (m["prompt_price_per_m"], m["vendor"].lower()))
+    return selected
+
+
 def refresh(force: bool = False) -> None:
     """Refresh the cached catalog if it is missing or stale."""
     with _cache_lock:
@@ -333,4 +378,5 @@ def describe_rules() -> Dict[str, Any]:
         "vendors": VENDOR_ALLOWLIST or f"any (top {MAX_VENDORS})",
         "pinned": PINNED_MODELS,
         "excluded_patterns": MODEL_EXCLUDE_PATTERNS,
+        "max_embedding_price_per_m": EMBEDDING_MAX_PRICE_PER_M,
     }
