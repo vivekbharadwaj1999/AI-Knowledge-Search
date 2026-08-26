@@ -1,5 +1,6 @@
 import os
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -108,6 +109,8 @@ async def lifespan(_app: FastAPI):
             pass
 
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="AI Knowledge Search Engine", lifespan=lifespan)
 
 origins = [
@@ -133,11 +136,15 @@ app.add_middleware(
 # CORS policy" error rather than the real server fault.
 @app.exception_handler(LLMError)
 async def llm_error_handler(request: Request, exc: LLMError):
+    # Log as well as return: the browser gets the detail, but without this the
+    # server keeps no record of why a 502 happened.
+    logger.warning("LLM failure on %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(status_code=502, content={"detail": str(exc)})
 
 
 @app.exception_handler(CatalogError)
 async def catalog_error_handler(request: Request, exc: CatalogError):
+    logger.warning("Catalog failure on %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 

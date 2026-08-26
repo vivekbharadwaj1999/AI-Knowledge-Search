@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { runBatchEvaluation } from "../api";
+import { runBatchEvaluation, errorDetail } from "../api";
 import ModelSelect from "./ModelSelect";
 import { useLLMModels } from "../useLLMModels";
 
@@ -116,7 +116,7 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
       setResults(result);
     } catch (error) {
       console.error("Batch evaluation failed:", error);
-      alert("Batch evaluation failed. See console for details.");
+      alert(errorDetail(error, "Batch evaluation failed."));
     } finally {
       setIsRunning(false);
     }

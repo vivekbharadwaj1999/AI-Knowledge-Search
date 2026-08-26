@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
+import { errorDetail } from "../api";
 
 interface AnalysisModalProps {
   isOpen: boolean;
@@ -302,7 +303,7 @@ export default function UnifiedAnalysisModal({
       ]);
     } catch (error) {
       console.error("Failed to recompute stability:", error);
-      alert("Failed to recompute answer stability. Please try again.");
+      alert(errorDetail(error, "Failed to recompute answer stability."));
     } finally {
       setIsRecomputing(false);
     }
@@ -405,7 +406,7 @@ export default function UnifiedAnalysisModal({
       });
     } catch (error) {
       console.error("Counterfactual analysis failed:", error);
-      alert("Failed to run counterfactual analysis. Please try again.");
+      alert(errorDetail(error, "Failed to run counterfactual analysis."));
     } finally {
       setIsRunningCounterfactual(false);
     }

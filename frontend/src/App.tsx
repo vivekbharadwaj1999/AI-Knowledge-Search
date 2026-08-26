@@ -37,6 +37,7 @@ import {
   checkOperationsLogExists,
   resetOperationsLog,
   cleanupGuestOnUnload,
+  errorDetail,
 } from "./api";
 
 
@@ -979,7 +980,7 @@ function App() {
       setDocVersion((v) => v + 1);
     } catch (err) {
       console.error("Failed to clear documents", err);
-      alert("Failed to remove documents. Check console for details.");
+      alert(errorDetail(err, "Failed to remove documents."));
     }
   };
 
@@ -1000,7 +1001,7 @@ function App() {
       });
     } catch (err) {
       console.error("Failed to generate report", err);
-      alert("Failed to generate AI report. Check console for details.");
+      alert(errorDetail(err, "Failed to generate AI report."));
     } finally {
       setIsGeneratingReport(false);
     }
@@ -1164,7 +1165,7 @@ function App() {
       setCompareQuestion("");
     } catch (err) {
       console.error("Compare failed", err);
-      alert("Compare failed. Check console for details.");
+      alert(errorDetail(err, "Compare failed."));
     } finally {
       setIsCompareLoading(false);
     }
@@ -1202,7 +1203,7 @@ function App() {
 
     } catch (err) {
       console.error("Critique failed", err);
-      alert("Critique failed. Check console for details.");
+      alert(errorDetail(err, "Critique failed."));
     } finally {
       setIsCritiqueLoading(false);
     }
@@ -1284,7 +1285,7 @@ function App() {
       appendOutput({ kind: "relations", relations: data });
     } catch (err) {
       console.error("Failed to analyze relations", err);
-      alert("Failed to analyze relations. Check console for details.");
+      alert(errorDetail(err, "Failed to analyze relations."));
     } finally {
       setRelationsLoading(false);
     }
@@ -1325,7 +1326,7 @@ function App() {
       setHasOperationsLog(true);
     } catch (error) {
       console.error("Analysis failed:", error);
-      alert("Failed to run advanced analysis. Please try again.");
+      alert(errorDetail(error, "Failed to run advanced analysis."));
     } finally {
       setAnalysisLoading(prev => ({ ...prev, [msgId]: false }));
     }
@@ -1357,7 +1358,7 @@ function App() {
       setHasOperationsLog(true);
     } catch (error) {
       console.error("Compare analysis failed:", error);
-      alert("Failed to run advanced analysis. Please try again.");
+      alert(errorDetail(error, "Failed to run advanced analysis."));
     } finally {
       setAnalysisLoading(prev => ({ ...prev, ["cmp_" + comparisonId]: false }));
     }
@@ -1391,7 +1392,7 @@ function App() {
       setHasOperationsLog(true);
     } catch (error) {
       console.error("Critique analysis failed:", error);
-      alert("Failed to run advanced analysis. Please try again.");
+      alert(errorDetail(error, "Failed to run advanced analysis."));
     } finally {
       setAnalysisLoading(prev => ({ ...prev, ["crt_" + critiqueId]: false }));
     }

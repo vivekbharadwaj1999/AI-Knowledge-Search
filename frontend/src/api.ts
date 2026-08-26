@@ -150,6 +150,23 @@ export async function fetchEmbeddingModels(): Promise<EmbeddingModel[]> {
   return res.data.models as EmbeddingModel[];
 }
 
+/**
+ * Pull the server's own explanation out of an axios error.
+ *
+ * The backend returns {"detail": "..."} for HTTPException and for the 502 it
+ * raises when an upstream model fails. Showing a generic "check the console"
+ * throws that message away and leaves the user with nothing actionable.
+ */
+export function errorDetail(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail.map((d: any) => d?.msg ?? JSON.stringify(d)).join("; ");
+  }
+  if (err?.message) return `${fallback} (${err.message})`;
+  return fallback;
+}
+
 export type LLMModel = {
   id: string;
   label: string;
