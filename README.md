@@ -2,7 +2,7 @@
 
 **Full Stack Retrieval Augmented Generation System with Multi Model Analysis, Faithfulness Evaluation, and Systematic Experimentation**
 
-An RAG research platform featuring 9 embedding models, 10 LLMs, 5 similarity metrics, automated quality assessment, faithfulness tracking, counterfactual analysis, and batch experimentation capabilities. Built for research, evaluation, and systematic experimentation.
+An RAG research platform featuring 20+ embedding models, 30+ LLMs, 5 similarity metrics, automated quality assessment, faithfulness tracking, counterfactual analysis, and batch experimentation capabilities. Built for research, evaluation, and systematic experimentation.
 
 ---
 
@@ -10,7 +10,8 @@ An RAG research platform featuring 9 embedding models, 10 LLMs, 5 similarity met
 
 Unlike typical RAG chatbots, VivBot is a comprehensive research experimentation platform that enables:
 
-- **Multi Model Comparison**: Test 9 embedding models and 10 LLMs simultaneously
+- **Multi Model Comparison**: Test 20+ embedding models and 30+ LLMs simultaneously
+- **Zero Hardcoded Models**: Model lists are fetched live from OpenRouter and curated by rule (price ceiling, capability floor, vendor diversity) rather than maintained by hand, so retired models disappear on their own and new ones appear without a code change
 - **Explainability First**: See exactly why each chunk was retrieved with 5 different similarity metrics
 - **Faithfulness Analysis**: Evidence coverage, hallucination detection, and sentence level support tracking using NLTK tokenization
 - **Answer Stability Analysis**: Quantify consistency across retrieval strategies using semantic similarity + ROUGE-L
@@ -21,15 +22,15 @@ Unlike typical RAG chatbots, VivBot is a comprehensive research experimentation 
 - **User Isolation**: Guest mode for instant access, accounts for persistent research data
 - **Research Infrastructure**: Complete experiment logging, reproducibility, and export capabilities
 
-**900+ possible configurations** (9 embeddings × 10 LLMs × 5 metrics × 20 Top K values) with full explainability, faithfulness tracking, and counterfactual analysis.
+**Tens of thousands of possible configurations** (21 embeddings × 34 LLMs × 5 metrics × 20 Top K values at the time of writing) with full explainability, faithfulness tracking, and counterfactual analysis. Because the model catalogs are live, that number moves with the providers.
 
 ---
 
 ## Key Features at a Glance
 
 ### Multi Model Analysis
-- **9 Embedding Models**: From 384D (MiniLM) to 3072D (OpenAI), including SBERT, BGE, E5, INSTRUCTOR, GTE, Jina AI
-- **10 LLM Options**: Llama 3.1/3.3/4, GPT-OSS, Qwen3, Kimi K2 (up to 256k context)
+- **Embedding Models**: 7 local models from 384D to 1024D (SBERT, BGE, E5, INSTRUCTOR, GTE, Jina AI) — free, private, no network — plus a live catalog of API models from OpenAI, Google, Voyage, Mistral, Qwen, NVIDIA and others
+- **LLM Options**: A curated live selection spanning Meta, OpenAI, Google, Anthropic, Mistral, DeepSeek, Qwen, Moonshot and more, grouped by vendor with per-token pricing shown in the picker
 - **5 Similarity Metrics**: Cosine, Dot Product, L2/L1 Distance, Hybrid (semantic + keyword)
 
 ### Operations Dashboard
@@ -132,7 +133,7 @@ Unlike typical RAG chatbots, VivBot is a comprehensive research experimentation 
 **Tech Stack:**
 - **Frontend**: React, TypeScript, Vite, Tailwind CSS, Headless UI
 - **Backend**: FastAPI, Python 3.10+, Uvicorn
-- **ML/AI**: Sentence Transformers, Groq API, OpenAI API (optional), ROUGE, NLTK
+- **ML/AI**: Sentence Transformers (local embeddings), OpenRouter (chat + API embeddings, OpenAI-compatible), ROUGE, NLTK
 - **Document Processing**: pypdf, python-docx, python-pptx, openpyxl, pandas
 - **Deployment**: Nginx, systemd, Ubuntu VPS
 
@@ -153,9 +154,10 @@ npm install
 
 ### Environment Setup
 ```bash
-# backend/.env
-GROQ_API_KEY=your_groq_api_key_here
-OPENAI_API_KEY=your_openai_key_here  # Optional, only for OpenAI embeddings
+# backend/.env  (see backend/.env.example for every option)
+OPENROUTER_API_KEY=sk-or-v1-your_key_here   # one key for all chat + API embedding models
+DEFAULT_MODEL=openai/gpt-oss-20b            # fallback when a request names no model
+USE_FAKE_LLM=false                          # true = run the whole app offline, no credits spent
 ```
 
 ### Running Locally
@@ -212,7 +214,7 @@ Start by uploading a document in section 1: "Upload & index a document". Support
 
 **Steps:**
 1. Click "Choose File" and pick a document from your computer
-2. Choose an **Embedding model** (local free options or OpenAI paid embeddings)
+2. Choose an **Embedding model** — local models run on the server for free and never send your text anywhere; API models go through OpenRouter and show their per-token price (some are free)
    - This choice affects how your document is represented in vector space
    - Changing it requires re-indexing (Upload & Index again)
 3. Adjust **Chunk size** to control how documents are split before indexing
@@ -285,7 +287,7 @@ Section 3 answers questions using only the selected document(s) or all documents
 
 **Steps:**
 1. Check the "Answering for document …" text to see which document is active
-2. Pick an LLM (for example LLaMA 3.1 8B Instant)
+2. Pick an LLM from the dropdown — models are grouped by the company that made them and show their input price
 3. Type a question about the selected document and press "Ask"
 4. The answer appears on the right, together with the retrieved context
 
@@ -552,7 +554,8 @@ vivbot/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                  # FastAPI app + 20+ endpoints
-│   │   ├── config.py                # 9 embedding + 10 LLM configs
+│   │   ├── config.py                # LLM + embedding clients, local model registry
+│   │   ├── models_catalog.py        # Live OpenRouter catalog + curation rules
 │   │   ├── vector_store.py          # JSONL storage + 5 similarity metrics
 │   │   ├── qa.py                    # Q&A + advanced analysis
 │   │   ├── critique.py              # Multi round critique engine
@@ -573,7 +576,7 @@ vivbot/
 │   │   │   └── uploads/             # Uploaded documents
 │   │   └── guests/{guest_id}/       # Ephemeral guest storage
 │   ├── requirements.txt
-│   └── INSTALLATION.md
+│   └── .env.example
 │
 ├── frontend/
 │   ├── src/
@@ -589,7 +592,9 @@ vivbot/
 │   │   │   ├── AuthModal.tsx              # Login/signup
 │   │   │   ├── UserDropdown.tsx           # User menu
 │   │   │   ├── RelationsOverlay.tsx       # Document relations
+│   │   │   ├── ModelSelect.tsx            # Shared vendor-grouped model picker
 │   │   │   └── InstructionsModal.tsx      # Help documentation
+│   │   ├── useLLMModels.ts          # Live model catalog hook
 │   │   ├── api.ts                   # API client
 │   │   └── workspace.ts
 │   ├── package.json
@@ -615,8 +620,9 @@ vivbot/
 | instructor-large | 768 | Local | Instruction-aware |
 | GTE-large-en-v1.5 | 1024 | Local | SOTA, matches OpenAI |
 | jina-v2-base-en | 768 | Local | 8K context window |
-| text-embedding-3-small | 1536 | API | OpenAI efficient |
-| text-embedding-3-large | 3072 | API | OpenAI premium |
+| *live catalog* | varies | API | ~14 models via OpenRouter, curated by price and vendor diversity — OpenAI, Google, Voyage, Mistral, Qwen, NVIDIA, Perplexity and others |
+
+API embedding models are fetched at runtime rather than listed here, precisely so this table cannot go stale. Duplicates of the local models are filtered out automatically.
 
 **Note**: Each document tracks which embedding model was used, enabling controlled experiments comparing model impact on retrieval quality.
 
@@ -772,13 +778,13 @@ MIT License - see LICENSE for details.
 
 - **Backend**: ~5,000 lines of Python
 - **Frontend**: ~250KB TypeScript/React
-- **Configurations**: 900+ possible (9 × 10 × 5 × 20)
+- **Configurations**: 70,000+ possible (21 × 34 × 5 × 20), and growing as providers ship models
 - **API Endpoints**: 20+
 - **Components**: 10+ major frontend components
 - **Supported File Types**: 6 (PDF, DOCX, PPTX, XLSX, TXT, CSV)
-- **Embedding Dimensions**: 384D to 3072D
+- **Embedding Models**: 7 local + ~14 API, 384D to 3072D
 - **Similarity Metrics**: 5 (Cosine, Dot, L2, L1, Hybrid)
-- **LLM Models**: 10 (Llama, GPT, Qwen, Kimi)
+- **LLM Models**: Live catalog, ~34 curated from 400+ available
 - **Top K Range**: 1-20 chunks
 
 ---
