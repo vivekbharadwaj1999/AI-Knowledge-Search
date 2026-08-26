@@ -51,13 +51,11 @@ def _summarize_long_document(
 You are summarizing part {idx} of {len(parts)} of a longer technical document.
 
 PART {idx} CONTENT:
-    pass
 -------------------
 {part}
 -------------------
 
 Write a concise summary of this part focusing on:
-    pass
 - main ideas
 - important definitions or equations
 - key arguments or results
@@ -135,13 +133,11 @@ You are given the content of a single document (such as lecture notes, a researc
 slides, or a technical article). Your job is to turn it into a detailed interactive study report.
 
 DOCUMENT CONTENT:
-    pass
 -----------------
 {doc_text}
 -----------------
 
 Return a STRICT JSON object with the following keys:
-    pass
 
 - executive_summary: 1–2 paragraphs high-level summary of the document.
 - sections: array of 3-5 objects max, each with:
@@ -164,7 +160,6 @@ Return a STRICT JSON object with the following keys:
 - cheat_sheet: array of 5-8 bullet-point strings summarising key formulas, facts, or steps.
 
 CRITICAL RULES:
-    pass
 - Output ONLY a single valid JSON object, with no backticks or extra commentary.
 - Keep responses CONCISE - don't write essays, keep to the limits above.
 - Use proper JSON syntax: all strings must be in double quotes, escape special characters.
