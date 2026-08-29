@@ -361,6 +361,12 @@ export async function runCritique(params: {
   top_k?: number;
   doc_name?: string;
   self_correct?: boolean;
+  /**
+   * Reuse round 1's retrieved chunks for round 2 rather than retrieving again.
+   * With this off, the improved prompt also changes which chunks come back, so
+   * the round-to-round score delta mixes two effects.
+   */
+  hold_retrieval?: boolean;
   similarity?: "cosine" | "dot" | "neg_l2" | "neg_l1" | "hybrid";
   normalize_vectors?: boolean;
   embedding_model?: string;  
@@ -368,6 +374,17 @@ export async function runCritique(params: {
   const res = await axios.post(`${API_BASE}/critique`, params);
   return res.data as CritiqueResult;
 }
+
+/**
+ * One claim the critic extracted from the answer, with its verdict against the
+ * retrieved passages. Correctness and hallucination_risk are computed from
+ * these server-side rather than self-reported by the model.
+ */
+export type CritiqueClaim = {
+  text: string;
+  verdict: "supported" | "partial" | "unsupported";
+  passages: number[];
+};
 
 export type CritiqueLogRow = {
   timestamp?: string;

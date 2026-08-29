@@ -104,15 +104,17 @@ function PromptTipsChips({ tags }: { tags: PromptIssueTag[] }) {
 function PromptBeforeAfter({
   original,
   improved,
+  roundLabel,
 }: {
   original: string;
   improved: string;
+  roundLabel?: string;
 }) {
   return (
     <div className="mt-2 space-y-2 text-xs">
       <div className="rounded-lg bg-slate-950/70 border border-slate-800 p-2">
         <div className="text-[10px] font-semibold uppercase text-slate-400 mb-1">
-          Before
+          Before{roundLabel ? ` (${roundLabel})` : ""}
         </div>
         <div className="whitespace-pre-wrap break-words text-slate-200">
           {original}
@@ -807,7 +809,18 @@ function App() {
 
     const known = (id: string) => Boolean(id) && llmModels.some((m) => m.id === id);
     const primary = known(defaultModel) ? defaultModel : llmModels[0].id;
-    const secondary = llmModels.find((m) => m.id !== primary)?.id ?? primary;
+
+    // The critic should be the strongest model available, not simply the next
+    // one in the list. This app previously hardcoded a 70B critic to judge an
+    // 8B answerer -- that asymmetry is the point of a critique, and a critic
+    // weaker than its subject just rubber-stamps. Price is the only capability
+    // signal the catalog carries, so use the dearest model under the ceiling.
+    const strongest = [...llmModels]
+      .filter((m) => m.id !== primary && !m.is_free)
+      .sort((a, b) => b.prompt_price_per_m - a.prompt_price_per_m)[0];
+    const secondary = strongest?.id
+      ?? llmModels.find((m) => m.id !== primary)?.id
+      ?? primary;
 
     setModelId((cur) => (known(cur) ? cur : primary));
     setModelLeft((cur) => (known(cur) ? cur : primary));
@@ -1807,6 +1820,7 @@ function App() {
 
                   <span>Enable self correcting critique loop (max 2 rounds)</span>
                 </label>
+
               </div>
               <div className="flex justify-end">
                 <button
@@ -2352,9 +2366,21 @@ function App() {
                             <MarkdownText text={crt.prompt_feedback_markdown} />
                           </div>
 
+                          {/* The "after" is the FINAL round's improved prompt, so
+                              the "before" must be that round's input — not the
+                              original question, which round 2 never saw. */}
                           <PromptBeforeAfter
-                            original={crt.question}
+                            original={
+                              crt.rounds?.length
+                                ? crt.rounds[crt.rounds.length - 1].question
+                                : crt.question
+                            }
                             improved={crt.improved_prompt}
+                            roundLabel={
+                              crt.rounds?.length > 1
+                                ? `round ${crt.rounds.length} input`
+                                : undefined
+                            }
                           />
 
                           <div className="flex justify-end">
