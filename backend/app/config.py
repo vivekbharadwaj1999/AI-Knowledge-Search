@@ -110,6 +110,11 @@ class LLMClient:
             self.client = OpenAI(
                 api_key=api_key or OPENROUTER_API_KEY,
                 base_url=OPENROUTER_BASE_URL,
+                # A critique run makes up to four sequential calls, so one
+                # transient 429 or 5xx fails the whole operation. The SDK
+                # retries these automatically; two is thin for a chain.
+                max_retries=4,
+                timeout=90.0,
                 default_headers={
                     "HTTP-Referer": APP_PUBLIC_URL,
                     "X-Title": APP_TITLE,

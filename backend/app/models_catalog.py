@@ -83,6 +83,9 @@ EMBEDDING_MAX_PER_VENDOR = int(os.getenv("EMBEDDING_MAX_PER_VENDOR", "2"))
 
 # Substrings that disqualify a model ID. Defaults cover two classes of model
 # that pass every numeric filter but break a synchronous chat app:
+#   :free   -- shared free-tier pools, rate-limited upstream. They cost nothing
+#              and fail constantly with 429s, which is the wrong trade for a
+#              demo people click. Paid models here run to fractions of a cent.
 #   :batch  -- asynchronous batch endpoints; they never return a completion
 #              inline, so selecting one would hang the request
 #   safety/guard/moderation -- classifiers that emit verdicts, not answers
@@ -90,7 +93,7 @@ MODEL_EXCLUDE_PATTERNS = [
     p.strip().lower()
     for p in os.getenv(
         "MODEL_EXCLUDE_PATTERNS",
-        ":batch,-safety,-guard,guardrail,moderation",
+        ":free,:batch,-safety,-guard,guardrail,moderation",
     ).split(",")
     if p.strip()
 ]
