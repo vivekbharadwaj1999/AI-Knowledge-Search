@@ -43,7 +43,13 @@ export default function BatchEvaluationPanel({ documents, onClose }: BatchEvalua
     if (llmModels.length === 0) return;
     const known = (id: string) => Boolean(id) && llmModels.some((m) => m.id === id);
     const primary = known(defaultModel) ? defaultModel : llmModels[0].id;
-    const secondary = llmModels.find((m) => m.id !== primary)?.id ?? primary;
+    // Same reasoning as the critique panel: the critic must outweigh its subject.
+    const strongest = [...llmModels]
+      .filter((m) => m.id !== primary && !m.is_free)
+      .sort((a, b) => b.prompt_price_per_m - a.prompt_price_per_m)[0];
+    const secondary = strongest?.id
+      ?? llmModels.find((m) => m.id !== primary)?.id
+      ?? primary;
 
     setAskModel((cur) => (known(cur) ? cur : primary));
     setCompareModelLeft((cur) => (known(cur) ? cur : primary));

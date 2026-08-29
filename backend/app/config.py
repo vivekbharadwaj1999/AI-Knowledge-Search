@@ -33,6 +33,51 @@ DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "openai/gpt-oss-20b")
 DEFAULT_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
 DEFAULT_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
 
+# The critique reply carries markdown feedback, prompt feedback, an improved
+# prompt, tags and scores in a single JSON object -- several times an ordinary
+# answer. At the default cap a verbose critic gets cut off mid-string, and
+# truncated JSON fails every parse strategy.
+CRITIQUE_MAX_TOKENS = int(os.getenv("CRITIQUE_MAX_TOKENS", "4096"))
+
+# Ask the provider to enforce JSON output. Off by default: not every model and
+# provider supports response_format, reasoning models can spend their whole
+# output budget and return nothing under it, and the prompt already asks for
+# JSON while the parser repairs malformed replies. Plain requests work with the
+# widest range of models, which matters more here than a format guarantee.
+CRITIQUE_JSON_MODE = os.getenv("CRITIQUE_JSON_MODE", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+
+# --- Provider routing -------------------------------------------------------
+# A model ID names a model, not a deployment. OpenRouter's default routing is
+# price-based -- it picks among the cheapest candidates, weighted by inverse
+# square of price -- so the same ID can be served by a different provider on
+# every request, at different quantization. That is why a model can behave
+# noticeably worse here than on a single-provider host that always served its
+# own deployment.
+#
+# OPENROUTER_QUANTIZATIONS is the quality lever: "bf16,fp16" excludes the
+# int4/fp8 deployments that budget providers use. Leave empty to allow any.
+# OPENROUTER_PROVIDER_SORT accepts "throughput", "price" or "latency".
+OPENROUTER_QUANTIZATIONS = [
+    q.strip() for q in os.getenv("OPENROUTER_QUANTIZATIONS", "").split(",") if q.strip()
+]
+OPENROUTER_PROVIDER_SORT = os.getenv("OPENROUTER_PROVIDER_SORT", "").strip()
+
+
+def _provider_preferences(json_mode: bool) -> Optional[Dict]:
+    prefs: Dict = {}
+    if OPENROUTER_QUANTIZATIONS:
+        prefs["quantizations"] = OPENROUTER_QUANTIZATIONS
+    if OPENROUTER_PROVIDER_SORT:
+        prefs["sort"] = OPENROUTER_PROVIDER_SORT
+    if json_mode:
+        # Without this, OpenRouter may route to a provider that does not
+        # support response_format and silently ignores it -- so JSON mode is
+        # requested, never applied, and the reply comes back as prose.
+        prefs["require_parameters"] = True
+    return prefs or None
+
 # OpenRouter attributes traffic using these; they show up on your dashboard.
 APP_TITLE = os.getenv("APP_TITLE", "AI Knowledge Search")
 APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "http://localhost:5173")
@@ -43,6 +88,17 @@ logger = logging.getLogger(__name__)
 
 class LLMError(RuntimeError):
     """An upstream model failure. The API layer maps this to a 502."""
+
+
+class EmptyCompletionError(LLMError):
+    """
+    The model returned no text at all.
+
+    Distinct from a general failure because the cause is usually specific and
+    fixable: a reasoning model can spend its entire output budget on internal
+    reasoning and emit nothing, which looks identical to a malformed reply
+    unless finish_reason is checked.
+    """
 
 
 class LLMClient:
@@ -59,6 +115,47 @@ class LLMClient:
                     "X-Title": APP_TITLE,
                 },
             )
+
+    def _create(self, kwargs: Dict, json_mode: bool):
+        """
+        Send the request, relaxing provider preferences if they exclude every
+        endpoint.
+
+        Quantization filtering only applies to open-weight models served by
+        third parties. Closed models are served solely by their owner and
+        report no quantization, so any filter rules them out entirely and
+        OpenRouter answers "No endpoints found". Preferences are a quality
+        preference, not a requirement, so they are dropped rather than allowed
+        to fail the request.
+        """
+        prefs = _provider_preferences(json_mode)
+        ladder: List[Optional[Dict]] = []
+        if prefs:
+            ladder.append(prefs)
+            if "quantizations" in prefs:
+                relaxed = {k: v for k, v in prefs.items() if k != "quantizations"}
+                ladder.append(relaxed or None)
+        ladder.append(None)
+
+        last_exc: Optional[Exception] = None
+        for attempt in ladder:
+            if attempt:
+                kwargs["extra_body"] = {"provider": attempt}
+            else:
+                kwargs.pop("extra_body", None)
+            try:
+                return self.client.chat.completions.create(**kwargs)
+            except Exception as exc:
+                last_exc = exc
+                if "no endpoints found" in str(exc).lower():
+                    logger.info(
+                        "Provider preferences %s matched no endpoint for %s; "
+                        "relaxing them.",
+                        attempt, kwargs.get("model"),
+                    )
+                    continue
+                raise
+        raise last_exc  # type: ignore[misc]
 
     def complete(
         self,
@@ -120,7 +217,7 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
 
         try:
-            resp = self.client.chat.completions.create(**kwargs)
+            resp = self._create(kwargs, json_mode)
         except Exception as exc:
             if not json_mode:
                 raise LLMError(f"Model '{chosen_model}' failed: {exc}") from exc
@@ -132,7 +229,7 @@ class LLMClient:
             )
             kwargs.pop("response_format", None)
             try:
-                resp = self.client.chat.completions.create(**kwargs)
+                resp = self._create(kwargs, False)
             except Exception as exc2:
                 raise LLMError(f"Model '{chosen_model}' failed: {exc2}") from exc2
 
@@ -140,7 +237,53 @@ class LLMClient:
         if not choices:
             raise LLMError(f"Model '{chosen_model}' returned no choices.")
 
-        return choices[0].message.content or ""
+        content = choices[0].message.content or ""
+        finish_reason = getattr(choices[0], "finish_reason", None)
+
+        # finish_reason == "length" means the model was cut off mid-sentence.
+        # For a caller expecting JSON that guarantees a parse failure, and it is
+        # otherwise invisible -- the reply just looks like malformed output.
+        if finish_reason == "length":
+            logger.warning(
+                "Model %s hit the %s-token output cap (finish_reason=length); "
+                "the reply is truncated%s.",
+                chosen_model, max_tokens,
+                " and will not parse as JSON" if json_mode else "",
+            )
+
+        # Some models accept response_format but answer with empty content
+        # (reasoning models can put everything in a separate field). Retry once
+        # in plain mode rather than reporting an empty critique.
+        if json_mode and not content.strip():
+            logger.info(
+                "Model %s returned empty content in JSON mode; retrying without it.",
+                chosen_model,
+            )
+            kwargs.pop("response_format", None)
+            try:
+                resp = self._create(kwargs, False)
+                choices = getattr(resp, "choices", None) or []
+                if choices:
+                    content = choices[0].message.content or ""
+            except Exception as exc:
+                raise LLMError(f"Model '{chosen_model}' failed: {exc}") from exc
+            finish_reason = (
+                getattr(choices[0], "finish_reason", None) if choices else None
+            )
+
+        if not content.strip():
+            if finish_reason == "length":
+                raise EmptyCompletionError(
+                    f"Model '{chosen_model}' used its entire {max_tokens}-token "
+                    f"output budget without producing any text. Reasoning models "
+                    f"spend that budget thinking. Raise CRITIQUE_MAX_TOKENS, or "
+                    f"pick a non-reasoning critic model."
+                )
+            raise EmptyCompletionError(
+                f"Model '{chosen_model}' returned an empty reply."
+            )
+
+        return content
 
 
 def get_available_models(include_all: bool = False) -> List[Dict]:

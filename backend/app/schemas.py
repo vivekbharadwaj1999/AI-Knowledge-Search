@@ -121,6 +121,12 @@ class CritiqueScores(BaseModel):
     hallucination_risk: Optional[float] = None
     prompt_quality: Optional[float] = None
 
+class CritiqueClaim(BaseModel):
+    text: str
+    # "supported" | "partial" | "unsupported"
+    verdict: str
+    passages: List[int] = []
+
 class CritiqueRound(BaseModel):
     round: int
     question: str
@@ -132,6 +138,9 @@ class CritiqueRound(BaseModel):
     improved_prompt: str
     prompt_issue_tags: List[str] = []
     scores: Optional[CritiqueScores] = None
+    claims: List[CritiqueClaim] = []
+    context_reused: bool = False
+    context_overlap_with_round_1: Optional[float] = None
 
 class CritiqueRequest(BaseModel):
     question: str
@@ -143,6 +152,9 @@ class CritiqueRequest(BaseModel):
     similarity: Optional[str] = "cosine"
     normalize_vectors: bool = True
     embedding_model: Optional[str] = None
+    # Reuse round 1's retrieved chunks for round 2 instead of retrieving again,
+    # so the round-to-round delta measures the prompt change alone.
+    hold_retrieval: bool = False
 
 class CritiqueResponse(BaseModel):
     question: str
@@ -156,6 +168,7 @@ class CritiqueResponse(BaseModel):
     improved_prompt: str
     prompt_issue_tags: List[str] = []
     scores: Optional[CritiqueScores] = None
+    claims: List[CritiqueClaim] = []
     rounds: List[CritiqueRound] = []
 
 class CritiqueLogRow(BaseModel):

@@ -1,3 +1,4 @@
+import difflib
 import json
 import logging
 import os
@@ -6,7 +7,13 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from app.config import LLMClient, DEFAULT_MODEL
+from app.config import (
+    LLMClient,
+    DEFAULT_MODEL,
+    CRITIQUE_MAX_TOKENS,
+    CRITIQUE_JSON_MODE,
+    EmptyCompletionError,
+)
 from app.auth import get_user_critique_log_path
 
 logger = logging.getLogger(__name__)
@@ -47,7 +54,11 @@ def _safe_tags(parsed: Dict[str, Any]) -> List[str]:
 def _build_critique_prompt(
     question: str, answer: str, context: List[str]
 ) -> str:
-    ctx = "\n\n---\n\n".join(context)
+    # Numbered so a critic that wants to cite evidence can say [2] rather than
+    # gesturing at "the context".
+    ctx = "\n\n".join(
+        f"[{i}] {passage}" for i, passage in enumerate(context, start=1)
+    )
     tags_str = ", ".join(f'"{t}"' for t in PROMPT_ISSUE_TAGS)
 
     return f"""
@@ -90,18 +101,95 @@ Return a SINGLE JSON object with the following EXACT structure:
 
 Rules:
 - Use markdown in the *_markdown fields (bullet points, bold, etc.).
-- "improved_prompt" MUST stay faithful to the user's original intent.
+- "improved_prompt" MUST stay faithful to the user's original intent, and must
+  be a question about the document — not a comment such as "No changes needed".
 - "prompt_issue_tags" must be a subset of: [{tags_str}].
 - "scores" values are floats between 0 and 1.
-- VERY IMPORTANT: The JSON MUST be valid.
-  - All keys and string values MUST use double quotes as in standard JSON.
-  - Inside any string value, do NOT include raw double quotes. If you need to
-    mention a title or phrase, either:
-      - use single quotes inside the string, or
-      - omit the quotes entirely.
-  - Do NOT include trailing commas.
 - Output *only* raw JSON, with no extra commentary before or after it.
 """
+
+
+def _repair_json(text: str) -> str:
+    """
+    Repair the three ways LLM-generated JSON actually breaks.
+
+    Models are reliable at *shaping* JSON and unreliable at *escaping* it. When
+    a critique quotes an answer containing markdown tables, quotation marks or
+    line breaks, the result is structurally correct but lexically invalid:
+
+      1. raw newlines/tabs inside a string value (must be \\n, \\t)
+      2. unescaped double quotes inside a string value
+      3. the reply cut off mid-string by the output token cap
+
+    This walks the text tracking whether we are inside a string, escapes what
+    must be escaped, and closes anything left open at the end.
+    """
+    out: List[str] = []
+    stack: List[str] = []
+    in_string = False
+    escaped = False
+
+    for i, ch in enumerate(text):
+        if escaped:
+            out.append(ch)
+            escaped = False
+            continue
+        if ch == "\\":
+            out.append(ch)
+            escaped = True
+            continue
+
+        if in_string:
+            if ch == '"':
+                # Closing quote, or a literal quote the model forgot to escape?
+                # A real closing quote is followed by a JSON delimiter.
+                j = i + 1
+                while j < len(text) and text[j] in " \t\r\n":
+                    j += 1
+                nxt = text[j] if j < len(text) else ""
+                if nxt in ",:}]" or nxt == "":
+                    in_string = False
+                    out.append(ch)
+                else:
+                    out.append('\\"')
+            elif ch == "\n":
+                out.append("\\n")
+            elif ch == "\r":
+                out.append("\\r")
+            elif ch == "\t":
+                out.append("\\t")
+            elif ord(ch) < 0x20:
+                out.append(" ")
+            else:
+                out.append(ch)
+        else:
+            if ch == '"':
+                in_string = True
+            elif ch in "{[":
+                stack.append(ch)
+            elif ch in "}]":
+                if stack:
+                    stack.pop()
+            out.append(ch)
+
+    repaired = "".join(out)
+
+    # Truncated mid-string: close it.
+    if in_string:
+        repaired += '"'
+
+    # A dangling key with no value ('..., "improved_prompt":') cannot be closed.
+    repaired = re.sub(r',\s*"[^"]*"\s*:\s*$', "", repaired.rstrip())
+    repaired = re.sub(r',\s*$', "", repaired)
+    # Trailing comma before a closer.
+    repaired = re.sub(r",(\s*[}\]])", r"\1", repaired)
+
+    # Close whatever is still open, innermost first.
+    for opener in reversed(stack):
+        repaired += "}" if opener == "{" else "]"
+
+    return repaired
+
 
 def _safe_json_parse(raw: str) -> Dict[str, Any] | None:
     raw = (raw or "").strip()
@@ -133,9 +221,50 @@ def _safe_json_parse(raw: str) -> Dict[str, Any] | None:
         except Exception:
             pass
 
+    # Last resort: repair escaping and truncation, then retry every candidate.
+    candidates = [raw]
+    if fenced:
+        candidates.insert(0, fenced.group(1).strip())
+    start = raw.find("{")
+    if start != -1:
+        candidates.insert(0, raw[start:])
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(_repair_json(candidate))
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            logger.info("Critique JSON recovered by repair pass.")
+            return parsed
+
     return None
 
+# An "improved prompt" is fed back as the next user question, so it must read
+# like a question about the document. Critics sometimes return the audit task
+# itself ("list which claims are supported...") or a meta-comment ("No changes
+# needed"). Either makes the next round meaningless, so both are rejected in
+# favour of simply re-asking the original question.
+_META_PROMPT_PATTERNS = re.compile(
+    r"\b(no changes? (are )?needed|not necessary|the (previous )?answer|"
+    r"the context|unsupported|partially supported|is sufficient|"
+    r"list the (key )?(factual )?claims)\b",
+    re.IGNORECASE,
+)
+
+
+def _usable_improved_prompt(candidate: str, original: str) -> tuple[str, bool]:
+    """Return (prompt_to_use, was_rejected)."""
+    text = (candidate or "").strip()
+    if len(text) < 12:
+        return original, True
+    if _META_PROMPT_PATTERNS.search(text):
+        return original, True
+    return text, False
+
+
 def _safe_scores(data: Dict[str, Any]) -> Dict[str, Optional[float]]:
+    """Scores exactly as the model reported them. Used only as a fallback."""
     scores = data.get("scores") or {}
 
     def _num(key: str) -> Optional[float]:
@@ -153,6 +282,126 @@ def _safe_scores(data: Dict[str, Any]) -> Dict[str, Optional[float]]:
         "clarity": _num("clarity"),
         "hallucination_risk": _num("hallucination_risk"),
     }
+
+
+_VERDICTS = {"supported", "partial", "unsupported"}
+
+
+def _safe_claims(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Normalise the per-claim verdict table the critic returns."""
+    raw = data.get("claims")
+    if not isinstance(raw, list):
+        return []
+
+    claims: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        text = _safe_str(item.get("text") or item.get("claim"))
+        if not text:
+            continue
+        verdict = str(item.get("verdict", "")).strip().lower().replace(" ", "_")
+        if verdict.startswith("partial"):
+            verdict = "partial"
+        if verdict not in _VERDICTS:
+            continue
+        passages = [p for p in (item.get("passages") or []) if isinstance(p, int)]
+        claims.append({"text": text, "verdict": verdict, "passages": passages})
+    return claims
+
+
+def _normalise(text: str) -> str:
+    return re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower())
+
+
+def _claims_grounded_in_answer(
+    claims: List[Dict[str, Any]], answer: str
+) -> tuple[List[Dict[str, Any]], int]:
+    """
+    Keep only claims that genuinely appear in the answer.
+
+    Critics reliably drift into auditing the context passages instead -- listing
+    resume sentences and marking them supported, which is trivially true and
+    measures nothing. Loose word-overlap could not separate the two, because a
+    claim and an answer about the same subject share most of their common
+    words. So the test is now near-verbatim: the claim must appear in the
+    answer as a substring, or match some window of it closely.
+    """
+    answer_norm = " ".join(_normalise(answer).split())
+    if not answer_norm:
+        return claims, 0
+
+    answer_words = answer_norm.split()
+    kept: List[Dict[str, Any]] = []
+    dropped = 0
+
+    for claim in claims:
+        needle = " ".join(_normalise(claim["text"]).split())
+        if not needle:
+            dropped += 1
+            continue
+
+        if needle in answer_norm:
+            kept.append(claim)
+            continue
+
+        # Allow light rewording (dropped articles, changed tense) but nothing
+        # like a different sentence about the same topic.
+        n = len(needle.split())
+        best = 0.0
+        for i in range(0, max(1, len(answer_words) - n + 1)):
+            window = " ".join(answer_words[i:i + n])
+            ratio = difflib.SequenceMatcher(None, needle, window).ratio()
+            if ratio > best:
+                best = ratio
+                if best >= 0.85:
+                    break
+
+        if best >= 0.85:
+            kept.append(claim)
+        else:
+            dropped += 1
+
+    return kept, dropped
+
+
+def _derive_scores(
+    data: Dict[str, Any],
+    claims: List[Dict[str, Any]],
+    num_passages: int,
+) -> Dict[str, Optional[float]]:
+    """
+    Compute the scores from the critic's own verdicts instead of trusting the
+    number it reports.
+
+    Asking a model for "correctness: 0.0-1.0" gets you an impression, which is
+    how a critique can list an omission and still award 100%. Asking it to
+    classify each claim, then doing the arithmetic here, makes the score follow
+    from evidence the critic committed to — and makes it auditable.
+
+    Clarity stays model-reported: it is a genuine judgement call, not a count.
+    """
+    reported = _safe_scores(data)
+    derived: Dict[str, Optional[float]] = dict(reported)
+
+    if claims:
+        total = len(claims)
+        supported = sum(1 for c in claims if c["verdict"] == "supported")
+        partial = sum(1 for c in claims if c["verdict"] == "partial")
+        unsupported = sum(1 for c in claims if c["verdict"] == "unsupported")
+        derived["correctness"] = round((supported + 0.5 * partial) / total, 3)
+        derived["hallucination_risk"] = round(unsupported / total, 3)
+
+    # Completeness = share of retrieved passages the answer actually drew on.
+    unused = data.get("unused_passages")
+    if isinstance(unused, list) and num_passages > 0:
+        unused_count = len({p for p in unused if isinstance(p, int) and 1 <= p <= num_passages})
+        derived["completeness"] = round(
+            max(0.0, (num_passages - unused_count) / num_passages), 3
+        )
+
+    return derived
+
 
 def reset_critique_log_file(username: Optional[str] = None, is_guest: bool = False) -> None:
     if not username:
@@ -177,6 +426,7 @@ def run_critique(
     temperature: Optional[float] = None,
     username: Optional[str] = None,
     is_guest: bool = True,
+    hold_retrieval: bool = False,
 ) -> Dict[str, Any]:
     """
     Run critique on a question and answer.
@@ -195,7 +445,7 @@ def run_critique(
         username: Username for per-user logging
         is_guest: Whether user is guest (for logging)
     """
-    from app.qa import answer_question
+    from app.qa import answer_question, build_prompt
     llm = LLMClient()
     critic = critic_model or DEFAULT_MODEL
 
@@ -211,26 +461,64 @@ def run_critique(
     final_prompt_feedback = ""
     final_improved_prompt = ""
     final_tags: List[str] = []
+    final_claims: List[Dict[str, Any]] = []
     final_scores: Dict[str, Optional[float]] | None = None
 
+    held_context: Optional[List[str]] = None
+    held_sources: Optional[List[Dict[str, Any]]] = None
+
     for round_idx in range(1, max_rounds + 1):
-        answer, context, sources = answer_question(
-            current_question,
-            k=top_k,
-            doc_name=doc_name,
-            model=answer_model,
-            similarity=similarity,
-            normalize_vectors=normalize_vectors,
-            embedding_model=embedding_model,
-            temperature=temperature,
-            username=username,
-            is_guest=is_guest,
-        )
+        reused_context = False
+
+        if hold_retrieval and held_context is not None:
+            # Answer the improved prompt against round 1's evidence instead of
+            # retrieving again.
+            #
+            # By default each round re-runs retrieval, so the improved prompt
+            # pulls different chunks -- which means round 1 and round 2 scores
+            # are computed against different evidence and the delta between
+            # them conflates two effects: a better prompt eliciting a better
+            # answer, and a better prompt retrieving better context. Holding
+            # retrieval fixed isolates the first.
+            reused_context = True
+            context, sources = held_context, held_sources or []
+            answer = llm.complete(
+                build_prompt(current_question, context),
+                model=answer_model,
+                temperature=temperature,
+            )
+        else:
+            answer, context, sources = answer_question(
+                current_question,
+                k=top_k,
+                doc_name=doc_name,
+                model=answer_model,
+                similarity=similarity,
+                normalize_vectors=normalize_vectors,
+                embedding_model=embedding_model,
+                temperature=temperature,
+                username=username,
+                is_guest=is_guest,
+            )
+            if held_context is None:
+                held_context, held_sources = context, sources
 
         prompt = _build_critique_prompt(current_question, answer, context)
-        raw = llm.complete(
-            prompt, model=critic, temperature=temperature, json_mode=True
-        )
+        empty_reason: Optional[str] = None
+        try:
+            raw = llm.complete(
+                prompt,
+                model=critic,
+                temperature=temperature,
+                json_mode=CRITIQUE_JSON_MODE,
+                max_tokens=CRITIQUE_MAX_TOKENS,
+            )
+        except EmptyCompletionError as exc:
+            # The answer itself is fine and already rendered; only the critique
+            # is missing, so report why rather than failing the whole request.
+            logger.warning("Critic produced nothing: %s", exc)
+            raw = ""
+            empty_reason = str(exc)
 
         parsed = _safe_json_parse(raw)
         critique_failed = parsed is None
@@ -238,10 +526,16 @@ def run_critique(
             # Previously this was `_safe_json_parse(raw) or {}`, which turned a
             # parse failure into empty strings and rendered as a blank panel --
             # indistinguishable from "the critic found nothing wrong".
-            preview = (raw or "").strip().replace("\n", " ")[:200]
+            text = (raw or "").strip()
+            flat = text.replace("\n", " ")
+            # Head AND tail AND length: a truncated reply starts like valid JSON
+            # and simply stops, so the opening 200 characters look fine and tell
+            # you nothing. The tail is what distinguishes the three failure
+            # modes -- cut off mid-string, prose with no JSON, or empty.
             logger.warning(
-                "Critique JSON parse failed. critic=%s answer_model=%s raw_start=%r",
-                critic, answer_model, preview,
+                "Critique JSON parse failed. critic=%s answer_model=%s len=%d "
+                "head=%r tail=%r",
+                critic, answer_model, len(text), flat[:160], flat[-160:],
             )
             parsed = {}
 
@@ -250,23 +544,47 @@ def run_critique(
         prompt_feedback = _safe_str(parsed.get("prompt_feedback_markdown"))
         improved_prompt = _safe_str(parsed.get("improved_prompt"))
         tags = _safe_tags(parsed)
-        scores = _safe_scores(parsed)
+        claims = _safe_claims(parsed)
+        claims, off_answer = _claims_grounded_in_answer(claims, answer)
+        if off_answer:
+            logger.warning(
+                "Critic %s returned %d claim(s) not present in the answer "
+                "(likely audited the context passages instead); discarded.",
+                critic, off_answer,
+            )
+        scores = _derive_scores(parsed, claims, len(context))
 
         if critique_failed and not answer_critique:
-            answer_critique = (
-                f"**The critic model `{critic}` did not return valid JSON,** so no "
-                "structured critique could be produced.\n\n"
-                "The critique step requires strict JSON (scores plus feedback). "
-                "Smaller or reasoning-heavy models often wrap their output in prose "
-                "and fail this contract even when they answer questions well. "
-                "Try a stronger critic model."
-            )
+            if empty_reason:
+                answer_critique = f"**No critique produced.** {empty_reason}"
+            else:
+                answer_critique = (
+                f"**No structured critique available.** The reply from `{critic}` "
+                "could not be read as JSON, even after a repair pass that handles "
+                "unescaped quotes, raw line breaks and truncated output.\n\n"
+                "The likely causes are that the model answered in prose instead of "
+                "JSON, or that its reply was cut short. Try a different critic "
+                "model, or raise `CRITIQUE_MAX_TOKENS` if the answer being "
+                "critiqued is long."
+                )
+
+        # Jaccard overlap with round 1's chunks: 1.0 means identical evidence,
+        # lower means retrieval moved and the round-to-round score delta is not
+        # a like-for-like comparison.
+        if held_context is None or round_idx == 1:
+            context_overlap = 1.0
+        else:
+            a, b = set(held_context), set(context)
+            context_overlap = (len(a & b) / len(a | b)) if (a or b) else 1.0
 
         round_entry = {
             "round": round_idx,
             "question": current_question,
             "answer": answer,
             "context": context,
+            "claims": claims,
+            "context_reused": reused_context,
+            "context_overlap_with_round_1": round(context_overlap, 3),
             "sources": sources,
             "answer_critique_markdown": answer_critique,
             "prompt_feedback_markdown": prompt_feedback,
@@ -276,6 +594,20 @@ def run_critique(
         }
         rounds.append(round_entry)
 
+        if not (answer or "").strip():
+            # An empty completion must not overwrite a good earlier round --
+            # that is how a working round 1 answer disappears from the UI.
+            logger.warning(
+                "Round %d produced an empty answer (model=%s); keeping the "
+                "previous round as final and stopping the loop.",
+                round_idx, answer_model,
+            )
+            if round_idx == 1:
+                final_answer = answer
+                final_context = context
+                final_sources = sources
+            break
+
         final_answer = answer
         final_context = context
         final_sources = sources
@@ -283,6 +615,7 @@ def run_critique(
         final_prompt_feedback = prompt_feedback
         final_improved_prompt = improved_prompt
         final_tags = tags
+        final_claims = claims
         final_scores = scores
 
         if round_idx == max_rounds:
@@ -300,7 +633,15 @@ def run_critique(
             and (hallucination is None or hallucination <= MAX_HALLUCINATION_FOR_EARLY_STOP)
         ):
             break
-        current_question = improved_prompt
+
+        next_question, rejected = _usable_improved_prompt(improved_prompt, question)
+        if rejected:
+            logger.warning(
+                "Critic %s returned an unusable improved prompt (%r); re-asking "
+                "the original question instead.",
+                critic, (improved_prompt or "")[:120],
+            )
+        current_question = next_question
 
     try:
         log_entry = {
@@ -335,6 +676,7 @@ def run_critique(
         "prompt_feedback_markdown": final_prompt_feedback,
         "improved_prompt": final_improved_prompt,
         "prompt_issue_tags": final_tags,
+        "claims": final_claims,
         "scores": final_scores,
         "rounds": rounds,
     }

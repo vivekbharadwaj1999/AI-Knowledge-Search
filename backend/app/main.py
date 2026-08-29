@@ -570,6 +570,7 @@ async def critique_route(payload: CritiqueRequest, authorization: Optional[str] 
         embedding_model=payload.embedding_model,
         username=username,
         is_guest=is_guest,
+        hold_retrieval=payload.hold_retrieval,
     )
 
     log_critique_operation(
